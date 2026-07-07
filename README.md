@@ -251,7 +251,7 @@ git clone https://github.com/you/api-gateway
 cd api-gateway
 
 # Run the gateway
-go run ./cmd/gateway
+go run ./cmd/gateway main.go
 ```
 
 The gateway listens on `:8080` by default.
