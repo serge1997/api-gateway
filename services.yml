@@ -12,7 +12,7 @@ services:
         burst: 1
       - type: window
         limit: 60
-        interval: 1
+        interval: "1m" #60 request in 1min, if empty default -> "1m"
     circuit_breaker:
       failure_threshold: 5 #falhas antes abrir
       retry_timeout: "10s"

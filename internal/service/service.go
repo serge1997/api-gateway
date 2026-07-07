@@ -46,9 +46,9 @@ func Parse(data []byte) error {
 	}
 	services = config.Services
 	for serviceName, service := range services {
-		for _, middlewareName := range service.Middlewares {
-			if !slices.Contains(service.CbConfig.Before, middlewareName) {
-				return fmt.Errorf("middleware %q declarado no before não existe em middlewares", serviceName)
+		for _, before := range service.CbConfig.Before {
+			if !slices.Contains(service.Middlewares, before) {
+				return fmt.Errorf("middleware %q declarado no before não existe em middlewares no serviço %q", before, serviceName)
 			}
 		}
 	}

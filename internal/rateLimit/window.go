@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+var defaultInterval = "1m"
 var ErrWindowNotFound error = errors.New("window not found")
 var ErrWindowLimitExceeded error = errors.New("window limit exceeded")
 var ErrEmptyCacheKey error = errors.New("erro on build window rate limit cache key")
@@ -22,9 +23,13 @@ type window struct {
 }
 
 func newWindow(conf *Config) *window {
+	parseIntervalToTimeDuration, err := time.ParseDuration(conf.Interval)
+	if err != nil {
+		parseIntervalToTimeDuration, _ = time.ParseDuration(conf.Interval)
+	}
 	return &window{
 		limit:    conf.Limit,
-		interval: time.Duration(conf.Interval) * time.Second,
+		interval: parseIntervalToTimeDuration,
 		count:    0,
 		time:     time.Now(),
 		key:      conf.Key,
