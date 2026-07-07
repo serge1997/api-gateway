@@ -9,7 +9,7 @@ A production-ready API Gateway written in Go, featuring per-service rate limitin
 - **Circuit Breaker** — per-service, with Closed / Open / Half-Open state machine and configurable failure threshold and retry timeout
 - **Rate Limiting** — two strategies per service: Token Bucket and Sliding Window
 - **Middleware Pipeline** — register middleware globally, apply per-service; control which middlewares run before the circuit breaker check
-- **YAML Configuration** — all behavior is declared in `gateway.yml`, no code changes required to add or modify services
+- **YAML Configuration** — all behavior is declared in `services.yml`, no code changes required to add or modify services
 
 ---
 
@@ -248,10 +248,7 @@ api-gateway/
 ```bash
 # Clone the repository
 git clone https://github.com/you/api-gateway
-cd gateway
-
-# Edit the configuration
-cp services.example.yml services.yml
+cd api-gateway
 
 # Run the gateway
 go run ./cmd/gateway
@@ -271,7 +268,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./config/gateway.yml:/app/config/gateway.yml
+      - ./services.yml:/app/services.yml
 
   users:
     image: your-users-service
