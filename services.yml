@@ -1,0 +1,22 @@
+services:
+  users:
+    name: users
+    target: http://localhost:8000/api
+    middlewares:
+      - auth_jwt
+      - cors
+      - logger
+    rate_limits:
+      - type: bucket
+        rate: 20
+        burst: 1
+      - type: window
+        limit: 60
+        interval: 1
+    circuit_breaker:
+      failure_threshold: 5 #falhas antes abrir
+      retry_timeout: "10s"
+      before:
+        - logger
+
+    
