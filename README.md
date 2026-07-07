@@ -66,7 +66,7 @@ Incoming Request
 ## Configuration
 
 ```yaml
-# gateway.yml
+# services.yml
 
 services:
   users:
@@ -248,10 +248,10 @@ api-gateway/
 ```bash
 # Clone the repository
 git clone https://github.com/you/api-gateway
-cd api-gateway
+cd gateway
 
 # Edit the configuration
-cp config/gateway.example.yml config/gateway.yml
+cp services.example.yml services.yml
 
 # Run the gateway
 go run ./cmd/gateway

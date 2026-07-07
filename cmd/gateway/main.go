@@ -1,12 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/serge1997/apigateway/internal/proxy"
-	"github.com/serge1997/apigateway/internal/service"
 )
 
 func main() {
@@ -17,15 +15,21 @@ func main() {
 			next(w, r)
 		}
 	})
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		serviceName := r.Header.Get("x-service-name")
-		srvce := service.Get(serviceName)
-		if srvce == nil {
-			fmt.Fprint(w, "service not found")
-			return
+	proxy.Use("auth_jwt", func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			token := r.Header.Get("Authorization")
+			if token == "" {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next(w, r)
 		}
-		prxy := proxy.New(srvce, r, w)
-		prxy.Call(r.Context())
 	})
-	log.Fatal(http.ListenAndServe(":9091", nil))
+	proxy.Use("cors", func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			next(w, r)
+		}
+	})
+	log.Fatal(http.ListenAndServe(":9091", proxy.Router()))
 }

@@ -17,6 +17,7 @@ import (
 type ServiceHttpHandler func(http.HandlerFunc) http.HandlerFunc
 
 var middlewares map[string]ServiceHttpHandler = map[string]ServiceHttpHandler{}
+var mux = http.NewServeMux()
 
 type proxy struct {
 	service *service.Service
@@ -29,6 +30,20 @@ func Use(name string, middleware ServiceHttpHandler) {
 }
 func New(service *service.Service, r *http.Request, w http.ResponseWriter) *proxy {
 	return &proxy{service: service, req: r, w: w}
+}
+
+func Router() http.Handler {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		serviceName := r.Header.Get("x-service-name")
+		srvce := service.Get(serviceName)
+		if srvce == nil {
+			fmt.Fprint(w, "service not found")
+			return
+		}
+		prxy := New(srvce, r, w)
+		prxy.Call(r.Context())
+	})
+	return mux
 }
 
 func (p *proxy) FullDomainePath() string {
