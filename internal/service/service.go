@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/goccy/go-yaml"
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
@@ -12,6 +13,7 @@ import (
 )
 
 var serviceHeaderName string = "x-service-name"
+var defaultTimeout = time.Second * 5
 var services map[string]Service
 
 func init() {
@@ -32,7 +34,16 @@ type Service struct {
 	RateLimits     []*ratelimit.Config            `yaml:"rate_limits"`
 	CircuitBreaker *circuitbreaker.CircuitBreaker `yam:"-"`
 	CbConfig       *circuitbreaker.Config         `yaml:"circuit_breaker"`
+	Timeout        time.Duration                  `yaml:"timeout"`
 }
+
+func (s *Service) GetTimeout() time.Duration {
+	if s.Timeout.Seconds() < float64(time.Second) {
+		return defaultTimeout
+	}
+	return s.Timeout
+}
+
 type Servicess struct {
 	Services map[string]Service
 }
@@ -70,4 +81,8 @@ func GetFromRequest(r *http.Request) *Service {
 
 func Services() map[string]Service {
 	return services
+}
+
+func Timeout() time.Duration {
+	return defaultTimeout
 }

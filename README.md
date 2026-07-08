@@ -72,7 +72,7 @@ services:
   users:
     name: users
     target: http://localhost:8000/api
-
+    timeout: "10s" # service http call timeout
     # Middlewares applied after the circuit breaker check.
     # Must be registered via proxy.Use() before the gateway starts.
     middlewares:

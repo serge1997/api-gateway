@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -142,15 +143,22 @@ func (p *proxy) withCircuitBreaker(handler http.HandlerFunc, befores []ServiceHt
 	}
 }
 func (p *proxy) call(w http.ResponseWriter, r *http.Request) {
-	request, err := http.NewRequestWithContext(p.req.Context(), p.req.Method, p.FullDomainePath(), p.req.Body)
+	ctx, cancel := context.WithTimeout(p.req.Context(), p.service.GetTimeout())
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, p.req.Method, p.FullDomainePath(), p.req.Body)
 	if err != nil {
 		responseErr := shared.HttpResponse{Message: err.Error(), Status: 501}.Json()
-		http.Error(w, responseErr, 501)
+		http.Error(w, responseErr, http.StatusInternalServerError)
 		return
 	}
 	p.setDefaultHeaders(request)
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
+		if errors.Is(err, ctx.Err()) {
+			responseErr := shared.HttpResponse{Message: fmt.Sprintf("service call timeout. err: %s", err.Error()), Status: http.StatusGatewayTimeout}.Json()
+			http.Error(w, responseErr, http.StatusGatewayTimeout)
+			return
+		}
 		responseErr := shared.HttpResponse{Message: err.Error(), Status: 501}.Json()
 		http.Error(w, responseErr, response.StatusCode)
 		if p.service.CircuitBreaker != nil {

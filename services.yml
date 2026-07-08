@@ -1,6 +1,7 @@
 services:
   users:
     name: users
+    timeout: "10s"
     target: http://localhost:8000/api
     middlewares:
       - auth_jwt
