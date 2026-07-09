@@ -19,5 +19,9 @@ services:
       retry_timeout: "10s"
       before:
         - logger
+    retry:
+      attempts: 5
+      backoff: exponential
+      max_delay: 1
 
     
