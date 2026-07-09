@@ -44,6 +44,11 @@ func Router() http.Handler {
 		prxy := New(srvce, r, w)
 		prxy.Call(r.Context())
 	})
+	mux.HandleFunc("/api/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		response := shared.HttpResponse{Data: service.Services(), Message: "todos os serviços", Status: 200}.Json()
+		fmt.Fprint(w, response)
+	})
 	return mux
 }
 
