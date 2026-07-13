@@ -42,3 +42,7 @@ func (r *retryBackoff) recordCbSuccess(cb *circuitbreaker.CircuitBreaker) {
 		cb.RecordSuccess()
 	}
 }
+
+func (r *retryBackoff) Config() *RetryBackoffConfig {
+	return r.config
+}

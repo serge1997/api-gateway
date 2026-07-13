@@ -15,7 +15,7 @@ import (
 
 var serviceHeaderName string = "x-service-name"
 var defaultTimeout = time.Second * 5
-var services map[string]Service
+var services map[string]*Service
 
 func init() {
 	services, err := shared.LoadServiceYml()
@@ -52,7 +52,7 @@ type Servicess struct {
 
 func Parse(data []byte) error {
 	var config struct {
-		Services map[string]Service `yaml:"services"`
+		Services map[string]*Service `yaml:"services"`
 	}
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return err
@@ -73,7 +73,7 @@ func Get(xServiceName string) *Service {
 	if !ok {
 		return nil
 	}
-	return &val
+	return val
 }
 
 func GetFromRequest(r *http.Request) *Service {
@@ -81,7 +81,7 @@ func GetFromRequest(r *http.Request) *Service {
 	return Get(xServiceName)
 }
 
-func Services() map[string]Service {
+func Services() map[string]*Service {
 	return services
 }
 

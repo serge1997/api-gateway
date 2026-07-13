@@ -158,10 +158,7 @@ func (p *proxy) makeServiceCall() result.Result[httpresponse.HttpResponse] {
 		if errors.Is(err, ctx.Err()) {
 			responseErr = result.Fail(httpresponse.FailResponse(err, http.StatusGatewayTimeout))
 		} else {
-			responseErr = result.Fail(httpresponse.FailResponse(err, 501))
-		}
-		if p.service.CircuitBreaker != nil {
-			p.service.CircuitBreaker.RecordFailure()
+			responseErr = result.Fail(httpresponse.FailResponse(err, http.StatusServiceUnavailable))
 		}
 		return responseErr
 	}

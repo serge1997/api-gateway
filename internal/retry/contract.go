@@ -15,4 +15,5 @@ type Op func() result.Result[httpresponse.HttpResponse]
 type RetryBackoffStrategy interface {
 	Execute(f Op, cb *circuitbreaker.CircuitBreaker) result.Result[httpresponse.HttpResponse]
 	NextInterval() time.Duration
+	Config() *RetryBackoffConfig
 }
