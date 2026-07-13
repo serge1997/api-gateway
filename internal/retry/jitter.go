@@ -16,20 +16,19 @@ type jitterBackoff struct {
 
 func (j *jitterBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result.Result[httpresponse.HttpResponse] {
 	for at := 1; at <= int(j.config.Attempts); at++ {
+		if cb != nil && cb.IsOpen() {
+			return result.Fail(httpresponse.FailResponse(circuitbreaker.ErrUnacessibleService, http.StatusServiceUnavailable))
+		}
 		jitResult := op()
 		if jitResult.IsSuccess() {
 			j.recordCbSuccess(cb)
 			return jitResult
 		}
 		j.recordCbFailure(cb)
-		if cb != nil && cb.IsOpen() {
-			return result.Fail(httpresponse.FailResponse(circuitbreaker.ErrUnacessibleService, http.StatusServiceUnavailable))
-		}
 		if at == int(j.config.Attempts) {
 			break
 		}
 		time.Sleep(j.NextInterval())
-		continue
 	}
 	return result.Fail(httpresponse.FailResponse(ErrBackoffAttemptsExceded, http.StatusServiceUnavailable))
 }
