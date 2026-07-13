@@ -11,8 +11,11 @@ import (
 
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
 	ratelimit "github.com/serge1997/apigateway/internal/rateLimit"
+	"github.com/serge1997/apigateway/internal/retry"
 	"github.com/serge1997/apigateway/internal/service"
 	"github.com/serge1997/apigateway/shared"
+	httpresponse "github.com/serge1997/apigateway/shared/httpResponse"
+	"github.com/serge1997/apigateway/shared/result"
 )
 
 type ServiceHttpHandler func(http.HandlerFunc) http.HandlerFunc
@@ -79,7 +82,7 @@ func (p *proxy) splitMiddlewares() (before, after []ServiceHttpHandler) {
 		if !ok {
 			continue
 		}
-		if slices.Contains(p.service.CircuitBreaker.Before(), name) {
+		if slices.Contains(p.service.CbConfig.Before, name) {
 			before = append(before, handler)
 		} else {
 			after = append(after, handler)
@@ -126,7 +129,6 @@ func (p *proxy) withCircuitBreaker(handler http.HandlerFunc, befores []ServiceHt
 		}
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		var cb *circuitbreaker.CircuitBreaker
 		if p.service.CircuitBreaker == nil {
 			cb, err := circuitbreaker.New(p.service.CbConfig)
 			if err != nil {
@@ -135,36 +137,33 @@ func (p *proxy) withCircuitBreaker(handler http.HandlerFunc, befores []ServiceHt
 			}
 			p.service.CircuitBreaker = cb
 		}
-		if err := cb.Handle(); err != nil {
+		if err := p.service.CircuitBreaker.Handle(); err != nil {
 			http.Error(w, err.Error(), 501)
 			return
 		}
 		finalHandler(w, r)
 	}
 }
-func (p *proxy) call(w http.ResponseWriter, r *http.Request) {
+func (p *proxy) makeServiceCall() result.Result[httpresponse.HttpResponse] {
 	ctx, cancel := context.WithTimeout(p.req.Context(), p.service.GetTimeout())
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, p.req.Method, p.FullDomainePath(), p.req.Body)
 	if err != nil {
-		responseErr := shared.HttpResponse{Message: err.Error(), Status: 501}.Json()
-		http.Error(w, responseErr, http.StatusInternalServerError)
-		return
+		return result.Fail(httpresponse.FailResponse(err, http.StatusInternalServerError))
 	}
 	p.setDefaultHeaders(request)
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
+		var responseErr result.Result[httpresponse.HttpResponse]
 		if errors.Is(err, ctx.Err()) {
-			responseErr := shared.HttpResponse{Message: fmt.Sprintf("service call timeout. err: %s", err.Error()), Status: http.StatusGatewayTimeout}.Json()
-			http.Error(w, responseErr, http.StatusGatewayTimeout)
-			return
+			responseErr = result.Fail(httpresponse.FailResponse(err, http.StatusGatewayTimeout))
+		} else {
+			responseErr = result.Fail(httpresponse.FailResponse(err, 501))
 		}
-		responseErr := shared.HttpResponse{Message: err.Error(), Status: 501}.Json()
-		http.Error(w, responseErr, response.StatusCode)
 		if p.service.CircuitBreaker != nil {
 			p.service.CircuitBreaker.RecordFailure()
 		}
-		return
+		return responseErr
 	}
 	defer response.Body.Close()
 	if response.StatusCode == 503 && p.service.CircuitBreaker != nil {
@@ -173,21 +172,35 @@ func (p *proxy) call(w http.ResponseWriter, r *http.Request) {
 	var clientResponse shared.HttpResponse
 	if err = json.NewDecoder(response.Body).Decode(&clientResponse); err != nil {
 		errMesage := fmt.Errorf("erro on decode service response. detail: %v", err)
-		response := shared.HttpResponse{Message: errMesage.Error(), Status: 501}.Json()
-		http.Error(w, response, 501)
-		return
+		return result.Fail(httpresponse.FailResponse(errMesage, 501))
 	}
 	if response.StatusCode > 299 {
-		responseErr := shared.HttpResponse{Message: clientResponse.Message, Status: response.StatusCode}.Json()
-		http.Error(w, responseErr, response.StatusCode)
-		return
+		return result.Fail(httpresponse.FailResponse(fmt.Errorf("%s", clientResponse.Message), 501))
 	}
-	successResponse := shared.HttpResponse{Message: clientResponse.Message, Data: clientResponse.Data, Status: response.StatusCode}.Json()
 	if p.service.CircuitBreaker != nil {
 		p.service.CircuitBreaker.RecordSuccess()
 	}
-	fmt.Fprint(w, successResponse)
+	return result.Ok(httpresponse.SuccessResponse(clientResponse.Data, http.StatusOK, clientResponse.Message))
 }
+func (p *proxy) call(w http.ResponseWriter, r *http.Request) {
+	if !p.service.HasRetryBackoffConfigured() {
+		serviceResult := p.makeServiceCall()
+		if !serviceResult.IsSuccess() {
+			http.Error(w, serviceResult.Value().Message, serviceResult.Value().Status)
+			return
+		}
+		fmt.Fprint(w, serviceResult.Value().Json())
+		return
+	}
+	retryBackoff := retry.New(p.service.RetryBackoff)
+	retryBackoffResult := retryBackoff.Execute(p.makeServiceCall, p.service.CircuitBreaker)
+	if !retryBackoffResult.IsSuccess() {
+		http.Error(w, retryBackoffResult.Value().Message, 501)
+		return
+	}
+	fmt.Fprint(w, retryBackoffResult.Value().Json())
+}
+
 func (p *proxy) Call(ctx context.Context) {
 	before, after := p.splitMiddlewares()
 	handler := p.withCircuitBreaker(p.call, before)

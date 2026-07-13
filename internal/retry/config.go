@@ -1,5 +1,7 @@
 package retry
 
+import "time"
+
 type backoffType string
 
 var (
@@ -9,10 +11,10 @@ var (
 	Jitter      backoffType = "jitter"
 )
 
-type RetryConfig struct {
-	Backoff  backoffType `yaml:"backoff"`
-	Attempts uint        `yaml:"attempts"`
-	MaxDelay uint        `yam:"max_delay"`
+type RetryBackoffConfig struct {
+	Backoff  backoffType   `yaml:"backoff"`
+	Attempts uint          `yaml:"attempts"`
+	Delay    time.Duration `yam:"delay"`
 }
 
 func (b backoffType) IsExponential() bool {
@@ -23,7 +25,7 @@ func (b backoffType) IsConstant() bool {
 	return b == "constant"
 }
 func (b backoffType) IsLinear() bool {
-	return b == "constant"
+	return b == "linear"
 }
 
 func (b backoffType) IsJitter() bool {

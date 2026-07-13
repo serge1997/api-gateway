@@ -9,6 +9,7 @@ import (
 	"github.com/goccy/go-yaml"
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
 	ratelimit "github.com/serge1997/apigateway/internal/rateLimit"
+	"github.com/serge1997/apigateway/internal/retry"
 	"github.com/serge1997/apigateway/shared"
 )
 
@@ -35,6 +36,7 @@ type Service struct {
 	CircuitBreaker *circuitbreaker.CircuitBreaker `yam:"-"`
 	CbConfig       *circuitbreaker.Config         `yaml:"circuit_breaker"`
 	Timeout        time.Duration                  `yaml:"timeout"`
+	RetryBackoff   *retry.RetryBackoffConfig      `yaml:"retry"`
 }
 
 func (s *Service) GetTimeout() time.Duration {
@@ -85,4 +87,11 @@ func Services() map[string]Service {
 
 func Timeout() time.Duration {
 	return defaultTimeout
+}
+
+func (s *Service) HasRetryBackoffConfigured() bool {
+	if s.RetryBackoff == nil {
+		return false
+	}
+	return true
 }
