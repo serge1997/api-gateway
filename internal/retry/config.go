@@ -11,6 +11,8 @@ var (
 	Jitter      backoffType = "jitter"
 )
 
+var defaultAttempt uint = 1
+
 type RetryBackoffConfig struct {
 	Backoff  backoffType   `yaml:"backoff"`
 	Attempts uint          `yaml:"attempts"`
@@ -34,4 +36,11 @@ func (b backoffType) IsJitter() bool {
 
 func (b backoffType) Is(bType string) bool {
 	return b == backoffType(bType)
+}
+
+func (c RetryBackoffConfig) Attempt() uint {
+	if c.Attempts < 1 {
+		return defaultAttempt
+	}
+	return c.Attempts
 }

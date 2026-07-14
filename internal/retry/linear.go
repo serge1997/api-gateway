@@ -16,7 +16,7 @@ type linearBackoff struct {
 
 func (l *linearBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result.Result[httpresponse.HttpResponse] {
 	var linearResult result.Result[httpresponse.HttpResponse]
-	for at := 1; at <= int(l.config.Attempts); at++ {
+	for at := 1; at <= int(l.config.Attempt()); at++ {
 		if cb != nil && cb.IsOpen() {
 			return result.Fail(httpresponse.FailResponse(circuitbreaker.ErrUnacessibleService, http.StatusServiceUnavailable))
 		}
