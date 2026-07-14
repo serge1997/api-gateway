@@ -32,7 +32,7 @@ func (c *constantBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) resu
 		time.Sleep(c.config.Delay)
 	}
 	return result.Fail(httpresponse.FailResponse(
-		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceded, consResult.Value().Message),
+		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceeded, consResult.Value().Message),
 		http.StatusServiceUnavailable),
 	)
 }

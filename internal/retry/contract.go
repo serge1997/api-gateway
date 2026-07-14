@@ -9,7 +9,7 @@ import (
 	"github.com/serge1997/apigateway/shared/result"
 )
 
-var ErrBackoffAttemptsExceded error = errors.New("retry backoff attempts exceeded")
+var ErrBackoffAttemptsExceeded error = errors.New("retry backoff attempts exceeded")
 
 type Op func() result.Result[httpresponse.HttpResponse]
 type RetryBackoffStrategy interface {

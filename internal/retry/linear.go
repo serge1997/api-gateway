@@ -33,7 +33,7 @@ func (l *linearBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result
 		continue
 	}
 	return result.Fail(httpresponse.FailResponse(
-		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceded, linearResult.Value().Message),
+		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceeded, linearResult.Value().Message),
 		http.StatusServiceUnavailable),
 	)
 }

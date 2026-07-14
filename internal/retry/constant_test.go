@@ -34,8 +34,8 @@ func TestReachMaxAttempts(t *testing.T) {
 	execResult := retryBackoff.Execute(func() result.Result[httpresponse.HttpResponse] {
 		return result.Fail(httpresponse.FailResponse(fmt.Errorf("some data missing."), http.StatusServiceUnavailable))
 	}, cb)
-	if !strings.Contains(execResult.Value().Message, retry.ErrBackoffAttemptsExceded.Error()) {
-		t.Errorf("expect: %s %s got: %s", retry.ErrBackoffAttemptsExceded.Error(), "some data missing", execResult.Value().Message)
+	if !strings.Contains(execResult.Value().Message, retry.ErrBackoffAttemptsExceeded.Error()) {
+		t.Errorf("expect: %s %s got: %s", retry.ErrBackoffAttemptsExceeded.Error(), "some data missing", execResult.Value().Message)
 	}
 	if execResult.Value().Status != http.StatusServiceUnavailable {
 		t.Errorf("expect status %d got %d", http.StatusServiceUnavailable, execResult.Value().Status)

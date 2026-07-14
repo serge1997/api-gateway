@@ -35,7 +35,7 @@ func (e *exponentialBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) r
 		time.Sleep(e.NextInterval())
 	}
 	return result.Fail(httpresponse.FailResponse(
-		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceded, expResult.Value().Message),
+		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceeded, expResult.Value().Message),
 		http.StatusServiceUnavailable),
 	)
 }

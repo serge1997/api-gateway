@@ -33,7 +33,7 @@ func (j *jitterBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result
 		time.Sleep(j.NextInterval())
 	}
 	return result.Fail(httpresponse.FailResponse(
-		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceded, jitResult.Value().Message),
+		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceeded, jitResult.Value().Message),
 		http.StatusServiceUnavailable),
 	)
 }
