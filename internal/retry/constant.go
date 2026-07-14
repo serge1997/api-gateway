@@ -1,6 +1,7 @@
 package retry
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -14,14 +15,15 @@ type constantBackoff struct {
 }
 
 func (c *constantBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result.Result[httpresponse.HttpResponse] {
+	var consResult result.Result[httpresponse.HttpResponse]
 	for at := 1; at < int(c.config.Attempts); at++ {
 		if cb != nil && cb.IsOpen() {
 			return result.Fail(httpresponse.FailResponse(circuitbreaker.ErrUnacessibleService, http.StatusServiceUnavailable))
 		}
-		opResult := op()
-		if opResult.IsSuccess() {
+		consResult = op()
+		if consResult.IsSuccess() {
 			c.recordCbSuccess(cb)
-			return opResult
+			return consResult
 		}
 		c.recordCbFailure(cb)
 		if at == int(c.config.Attempts) {
@@ -29,7 +31,10 @@ func (c *constantBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) resu
 		}
 		time.Sleep(c.config.Delay)
 	}
-	return result.Fail(httpresponse.FailResponse(ErrBackoffAttemptsExceded, http.StatusServiceUnavailable))
+	return result.Fail(httpresponse.FailResponse(
+		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceded, consResult.Value().Message),
+		http.StatusServiceUnavailable),
+	)
 }
 
 func (c *constantBackoff) NextInterval() time.Duration {

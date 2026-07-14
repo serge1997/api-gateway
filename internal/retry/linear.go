@@ -1,6 +1,7 @@
 package retry
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -14,11 +15,12 @@ type linearBackoff struct {
 }
 
 func (l *linearBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result.Result[httpresponse.HttpResponse] {
+	var linearResult result.Result[httpresponse.HttpResponse]
 	for at := 1; at <= int(l.config.Attempts); at++ {
 		if cb != nil && cb.IsOpen() {
 			return result.Fail(httpresponse.FailResponse(circuitbreaker.ErrUnacessibleService, http.StatusServiceUnavailable))
 		}
-		linearResult := op()
+		linearResult = op()
 		if linearResult.IsSuccess() {
 			l.recordCbSuccess(cb)
 			return linearResult
@@ -30,7 +32,10 @@ func (l *linearBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result
 		time.Sleep(l.NextInterval())
 		continue
 	}
-	return result.Fail(httpresponse.FailResponse(ErrBackoffAttemptsExceded, http.StatusServiceUnavailable))
+	return result.Fail(httpresponse.FailResponse(
+		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceded, linearResult.Value().Message),
+		http.StatusServiceUnavailable),
+	)
 }
 
 func (l *linearBackoff) NextInterval() time.Duration {

@@ -1,6 +1,7 @@
 package retry
 
 import (
+	"fmt"
 	"math/rand"
 	"net/http"
 	"time"
@@ -15,11 +16,12 @@ type jitterBackoff struct {
 }
 
 func (j *jitterBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result.Result[httpresponse.HttpResponse] {
+	var jitResult result.Result[httpresponse.HttpResponse]
 	for at := 1; at <= int(j.config.Attempts); at++ {
 		if cb != nil && cb.IsOpen() {
 			return result.Fail(httpresponse.FailResponse(circuitbreaker.ErrUnacessibleService, http.StatusServiceUnavailable))
 		}
-		jitResult := op()
+		jitResult = op()
 		if jitResult.IsSuccess() {
 			j.recordCbSuccess(cb)
 			return jitResult
@@ -30,7 +32,10 @@ func (j *jitterBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result
 		}
 		time.Sleep(j.NextInterval())
 	}
-	return result.Fail(httpresponse.FailResponse(ErrBackoffAttemptsExceded, http.StatusServiceUnavailable))
+	return result.Fail(httpresponse.FailResponse(
+		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceded, jitResult.Value().Message),
+		http.StatusServiceUnavailable),
+	)
 }
 
 func (j *jitterBackoff) NextInterval() time.Duration {

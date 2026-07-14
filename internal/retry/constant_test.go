@@ -1,7 +1,9 @@
 package retry_test
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,10 +32,10 @@ func TestBackoffRetryIsConstant(t *testing.T) {
 func TestReachMaxAttempts(t *testing.T) {
 	cb, _ := circuitbreaker.New(cbConfig)
 	execResult := retryBackoff.Execute(func() result.Result[httpresponse.HttpResponse] {
-		return result.Fail(httpresponse.FailResponse(retry.ErrBackoffAttemptsExceded, http.StatusServiceUnavailable))
+		return result.Fail(httpresponse.FailResponse(fmt.Errorf("some data missing."), http.StatusServiceUnavailable))
 	}, cb)
-	if execResult.Value().Message != retry.ErrBackoffAttemptsExceded.Error() {
-		t.Errorf("expect %s got %s", retry.ErrBackoffAttemptsExceded.Error(), execResult.Value().Message)
+	if !strings.Contains(execResult.Value().Message, retry.ErrBackoffAttemptsExceded.Error()) {
+		t.Errorf("expect: %s %s got: %s", retry.ErrBackoffAttemptsExceded.Error(), "some data missing", execResult.Value().Message)
 	}
 	if execResult.Value().Status != http.StatusServiceUnavailable {
 		t.Errorf("expect status %d got %d", http.StatusServiceUnavailable, execResult.Value().Status)
@@ -45,14 +47,14 @@ func TestMustReturnCbError(t *testing.T) {
 	var execResult result.Result[httpresponse.HttpResponse]
 	for range 10 {
 		execResult = retryBackoff.Execute(func() result.Result[httpresponse.HttpResponse] {
-			return result.Fail(httpresponse.FailResponse(retry.ErrBackoffAttemptsExceded, http.StatusServiceUnavailable))
+			return result.Fail(httpresponse.FailResponse(fmt.Errorf("internal server err"), http.StatusServiceUnavailable))
 		}, cb)
 		if cb.IsOpen() {
 			break
 		}
 	}
-	if execResult.Value().Message != circuitbreaker.ErrUnacessibleService.Error() {
-		t.Errorf("expect %s got %s", circuitbreaker.ErrUnacessibleService.Error(), execResult.Value().Message)
+	if !strings.Contains(execResult.Value().Message, circuitbreaker.ErrUnacessibleService.Error()) {
+		t.Errorf("expect: %s %s got %s", circuitbreaker.ErrUnacessibleService.Error(), "internal server err", execResult.Value().Message)
 	}
 }
 
