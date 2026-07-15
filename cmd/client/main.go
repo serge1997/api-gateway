@@ -18,19 +18,19 @@ func main() {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	wg.Add(10)
-	for range 10 {
+	wg.Add(1)
+	for range 1 {
 		time.Sleep(time.Millisecond * 100)
 		go func() {
-			defer wg.Done()
-			doRequest(ctx)
+			doRequest(ctx, &wg)
 		}()
 	}
 
 	wg.Wait()
 }
 
-func doRequest(ctx context.Context) {
+func doRequest(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
 	path := fmt.Sprintf("%s/product-categories?limit=20&offset=0", gateway)
 	request, err := http.NewRequestWithContext(
 		ctx,
@@ -52,7 +52,7 @@ func doRequest(ctx context.Context) {
 	defer response.Body.Close()
 	if response.StatusCode > 299 {
 		body, _ := io.ReadAll(response.Body)
-		fmt.Println(string(body))
+		fmt.Printf("%d: %s", response.StatusCode, string(body))
 		return
 	}
 	var data interface{}

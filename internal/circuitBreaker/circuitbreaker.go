@@ -131,3 +131,7 @@ func (c *CircuitBreaker) Handle() error {
 func (c *CircuitBreaker) Before() []string {
 	return c.before
 }
+
+func (c *CircuitBreaker) FailureCount() int {
+	return c.failureCount
+}

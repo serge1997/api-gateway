@@ -1,4 +1,4 @@
-package shared
+package httpresponse
 
 import "encoding/json"
 

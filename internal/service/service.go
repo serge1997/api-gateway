@@ -9,12 +9,13 @@ import (
 	"github.com/goccy/go-yaml"
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
 	ratelimit "github.com/serge1997/apigateway/internal/rateLimit"
+	"github.com/serge1997/apigateway/internal/retry"
 	"github.com/serge1997/apigateway/shared"
 )
 
 var serviceHeaderName string = "x-service-name"
 var defaultTimeout = time.Second * 5
-var services map[string]Service
+var services map[string]*Service
 
 func init() {
 	services, err := shared.LoadServiceYml()
@@ -35,6 +36,7 @@ type Service struct {
 	CircuitBreaker *circuitbreaker.CircuitBreaker `yam:"-"`
 	CbConfig       *circuitbreaker.Config         `yaml:"circuit_breaker"`
 	Timeout        time.Duration                  `yaml:"timeout"`
+	RetryBackoff   *retry.RetryBackoffConfig      `yaml:"retry"`
 }
 
 func (s *Service) GetTimeout() time.Duration {
@@ -50,7 +52,7 @@ type Servicess struct {
 
 func Parse(data []byte) error {
 	var config struct {
-		Services map[string]Service `yaml:"services"`
+		Services map[string]*Service `yaml:"services"`
 	}
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return err
@@ -71,7 +73,7 @@ func Get(xServiceName string) *Service {
 	if !ok {
 		return nil
 	}
-	return &val
+	return val
 }
 
 func GetFromRequest(r *http.Request) *Service {
@@ -79,10 +81,17 @@ func GetFromRequest(r *http.Request) *Service {
 	return Get(xServiceName)
 }
 
-func Services() map[string]Service {
+func Services() map[string]*Service {
 	return services
 }
 
 func Timeout() time.Duration {
 	return defaultTimeout
+}
+
+func (s *Service) HasRetryBackoffConfigured() bool {
+	if s.RetryBackoff == nil {
+		return false
+	}
+	return true
 }
