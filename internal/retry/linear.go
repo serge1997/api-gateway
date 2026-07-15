@@ -30,7 +30,6 @@ func (l *linearBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result
 			break
 		}
 		time.Sleep(l.NextInterval())
-		continue
 	}
 	return result.Fail(httpresponse.FailResponse(
 		fmt.Errorf("%s. reason: %s", ErrBackoffAttemptsExceeded, linearResult.Value().Message),
@@ -44,5 +43,9 @@ func (l *linearBackoff) NextInterval() time.Duration {
 	} else {
 		l.interval += l.config.Delay
 	}
+	return l.interval
+}
+
+func (l *linearBackoff) Interval() time.Duration {
 	return l.interval
 }

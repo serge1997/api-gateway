@@ -1,7 +1,6 @@
 package retry
 
 import (
-	"fmt"
 	"time"
 
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
@@ -13,7 +12,6 @@ type retryBackoff struct {
 }
 
 func New(conf *RetryBackoffConfig) RetryBackoffStrategy {
-	fmt.Println(conf.Backoff)
 	backoff := retryBackoff{config: conf}
 	if conf.Backoff.IsConstant() {
 		return &constantBackoff{backoff}
@@ -45,4 +43,8 @@ func (r *retryBackoff) recordCbSuccess(cb *circuitbreaker.CircuitBreaker) {
 
 func (r *retryBackoff) Config() *RetryBackoffConfig {
 	return r.config
+}
+
+func (r *retryBackoff) Interval() time.Duration {
+	return r.interval
 }

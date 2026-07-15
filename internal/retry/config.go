@@ -44,3 +44,6 @@ func (c RetryBackoffConfig) Attempt() uint {
 	}
 	return c.Attempts
 }
+func DefaultAttempts() uint {
+	return defaultAttempt
+}

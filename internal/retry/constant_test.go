@@ -67,3 +67,18 @@ func TestExecuteMustSuccess(t *testing.T) {
 		t.Errorf("expect Execute must success, got %v", execResult.IsSuccess())
 	}
 }
+
+func TestAttempsIsDefaultValue(t *testing.T) {
+	retryBackoff.Config().Attempts = 0
+	cb, _ := circuitbreaker.New(cbConfig)
+	execResult := retryBackoff.Execute(func() result.Result[httpresponse.HttpResponse] {
+		return result.Ok(httpresponse.SuccessResponse(nil, http.StatusOK, ""))
+	}, cb)
+	if !execResult.IsSuccess() {
+		t.Errorf("expect Execute must success, got %v", execResult.Value().Message)
+	}
+	if retryBackoff.Config().Attempt() != retry.DefaultAttempts() {
+		t.Errorf("expect attempt to be %d, got %v", retry.DefaultAttempts(), retryBackoff.Config().Attempt())
+	}
+	retryBackoff.Config().Attempts = 3
+}
