@@ -218,6 +218,56 @@ circuit_breaker:
 
 The `before` list controls which middlewares execute before the circuit breaker check. This is useful for logging and metrics — you may want to record rejected requests even when the circuit is open.
 
+
+## Retry with Backoff
+ 
+When a downstream service fails, the gateway can retry the request automatically using a configurable backoff strategy. Each retry checks the circuit breaker state before attempting — if the circuit opened during retries, the gateway aborts immediately instead of continuing to hammer an unhealthy service.
+ 
+### Strategies
+ 
+| Strategy | Behavior |
+|---|---|
+| **constant** | Fixed delay between every attempt |
+| **linear** | Delay grows linearly with each attempt |
+| **exponential** | Delay doubles with each attempt |
+| **jitter** | Random delay up to a configured maximum — spreads retries across time to avoid thundering herd |
+ 
+### Configuration
+ 
+```yaml
+services:
+  orders:
+    target: http://localhost:9000/api
+ 
+    retry:
+      strategy: exponential
+      attempts: 3         # default: 1
+      max_delay: "1s"     # applies to jitter and exponential
+```
+ 
+### How it integrates with the Circuit Breaker
+ 
+At the start of each attempt, the gateway checks whether the circuit breaker is open. If it is, the retry loop exits immediately and returns `503 Service Unavailable` — no further calls are made to the downstream service.
+ 
+```
+attempt 1 → cb open? no  → call service → failure → RecordFailure()
+attempt 2 → cb open? no  → call service → failure → RecordFailure() → cb opens
+attempt 3 → cb open? yes → abort immediately → 503
+```
+ 
+Every success calls `RecordSuccess()` and every failure calls `RecordFailure()` on the circuit breaker, so the two mechanisms stay in sync without any manual coordination.
+ 
+### Backoff intervals
+ 
+```
+constant:     100ms ─── 100ms ─── 100ms
+linear:       100ms ─── 200ms ─── 300ms
+exponential:  100ms ─── 200ms ─── 400ms
+jitter:       ~300ms ── ~750ms ── ~100ms  (random, up to max_delay)
+```
+ 
+Jitter is recommended for high-traffic services — when many clients retry at the same interval they hit the recovering service simultaneously. Randomizing the delay spreads the load.
+
 ---
 
 ## Project Structure
