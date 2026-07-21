@@ -18,13 +18,13 @@ const (
 )
 
 type CircuitBreaker struct {
-	failureThreshold int           //limit of failures before opening the circuit
-	retryTimeout     time.Duration //time in seconds to wait before retrying after the circuit is opened
-	failureCount     int           //current number of consecutive failures
-	lastFailure      time.Time
-	successCount     int
-	state            State //current state of the circuit (closed, open, half-open)
-	before           []string
+	FailureThreshold int           `json:"-"`            //limit of failures before opening the circuit
+	RetryTimeout     time.Duration `json:"-"`            //time in seconds to wait before retrying after the circuit is opened
+	FailureCount     int           `json:"failureCount"` //current number of consecutive failures
+	LastFailure      time.Time     `json:"lastFailure"`
+	SuccessCount     int           `json:"successCount"`
+	State            State         `json:"state"` //current state of the circuit (closed, open, half-open)
+	Before           []string
 	mu               sync.RWMutex
 }
 
@@ -34,21 +34,21 @@ func New(config *Config) (*CircuitBreaker, error) {
 		return nil, fmt.Errorf("retry_timeout inválido %q: %w", config.RetryTimeout, err)
 	}
 	return &CircuitBreaker{
-		failureThreshold: config.FailureThreshold,
-		retryTimeout:     timeout,
-		failureCount:     0,
-		successCount:     0,
-		state:            Closed,
-		before:           config.Before,
+		FailureThreshold: config.FailureThreshold,
+		RetryTimeout:     timeout,
+		FailureCount:     0,
+		SuccessCount:     0,
+		State:            Closed,
+		Before:           config.Before,
 	}, nil
 }
 func (c *CircuitBreaker) RecordFailure() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.failureCount++
-	c.successCount = 0
-	c.lastFailure = time.Now()
-	if c.failureCount >= c.failureThreshold {
+	c.FailureCount++
+	c.SuccessCount = 0
+	c.LastFailure = time.Now()
+	if c.FailureCount >= c.FailureThreshold {
 		c.setOpen()
 	}
 }
@@ -57,25 +57,25 @@ func (c *CircuitBreaker) RecordSuccess() {
 	defer c.mu.Unlock()
 	if c.isHalfOpen() {
 		c.setClosed()
-		c.failureCount = 0
-		c.successCount = 0
+		c.FailureCount = 0
+		c.SuccessCount = 0
 	}
-	c.successCount++
+	c.SuccessCount++
 }
 
 func (c *CircuitBreaker) Reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.setClosed()
-	c.failureCount = 0
-	c.successCount = 0
+	c.FailureCount = 0
+	c.SuccessCount = 0
 }
 
 // nao usar lock aqui
 // já chamado no Handler com lock
 func (c *CircuitBreaker) recordHalfOpen() {
-	if c.failureCount >= 1 {
-		if c.lastFailure.Add(c.retryTimeout).Before(time.Now()) {
+	if c.FailureCount >= 1 {
+		if c.LastFailure.Add(c.RetryTimeout).Before(time.Now()) {
 			c.setHalfOpen()
 		}
 	}
@@ -84,36 +84,36 @@ func (c *CircuitBreaker) recordHalfOpen() {
 func (c *CircuitBreaker) IsOpen() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.state == Open
+	return c.State == Open
 }
 func (c *CircuitBreaker) IsClosed() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.state == Closed
+	return c.State == Closed
 }
 func (c *CircuitBreaker) IsHalfOpen() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.state == HalfOpen
+	return c.State == HalfOpen
 }
 
 func (c *CircuitBreaker) isOpen() bool {
-	return c.state == Open
+	return c.State == Open
 }
 
 func (c *CircuitBreaker) isHalfOpen() bool {
-	return c.state == HalfOpen
+	return c.State == HalfOpen
 }
 
 func (c *CircuitBreaker) setOpen() {
-	c.state = Open
+	c.State = Open
 }
 func (c *CircuitBreaker) setClosed() {
-	c.state = Closed
+	c.State = Closed
 }
 
 func (c *CircuitBreaker) setHalfOpen() {
-	c.state = HalfOpen
+	c.State = HalfOpen
 }
 
 func (c *CircuitBreaker) Handle() error {
@@ -126,12 +126,4 @@ func (c *CircuitBreaker) Handle() error {
 		}
 	}
 	return nil
-}
-
-func (c *CircuitBreaker) Before() []string {
-	return c.before
-}
-
-func (c *CircuitBreaker) FailureCount() int {
-	return c.failureCount
 }

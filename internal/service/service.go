@@ -29,14 +29,14 @@ func init() {
 }
 
 type Service struct {
-	Name           string                         `yaml:"name"`
-	Target         string                         `yaml:"target"`
-	Middlewares    []string                       `yaml:"middlewares"`
-	RateLimits     []*ratelimit.Config            `yaml:"rate_limits"`
-	CircuitBreaker *circuitbreaker.CircuitBreaker `yam:"-"`
-	CbConfig       *circuitbreaker.Config         `yaml:"circuit_breaker"`
-	Timeout        time.Duration                  `yaml:"timeout"`
-	RetryBackoff   *retry.RetryBackoffConfig      `yaml:"retry"`
+	Name           string                         `yaml:"name" json:"name"`
+	Target         string                         `yaml:"target" json:"target"`
+	Middlewares    []string                       `yaml:"middlewares" json:"middlewares"`
+	RateLimits     []*ratelimit.Config            `yaml:"rate_limits" json:"rateLimits"`
+	CircuitBreaker *circuitbreaker.CircuitBreaker `yam:"-" json:"cb"`
+	CbConfig       *circuitbreaker.Config         `yaml:"circuit_breaker" json:"cbConfig"`
+	Timeout        time.Duration                  `yaml:"timeout" json:"timeout"`
+	RetryBackoff   *retry.RetryBackoffConfig      `yaml:"retry" json:"retryBackoff"`
 }
 
 func (s *Service) GetTimeout() time.Duration {

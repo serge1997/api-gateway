@@ -5,14 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
+	"github.com/serge1997/apigateway/internal/database"
 	ratelimit "github.com/serge1997/apigateway/internal/rateLimit"
+	"github.com/serge1997/apigateway/internal/reporitory"
 	"github.com/serge1997/apigateway/internal/retry"
 	"github.com/serge1997/apigateway/internal/service"
+	"github.com/serge1997/apigateway/internal/stream"
 	"github.com/serge1997/apigateway/shared"
 	httpresponse "github.com/serge1997/apigateway/shared/httpResponse"
 	"github.com/serge1997/apigateway/shared/result"
@@ -24,9 +29,10 @@ var middlewares map[string]ServiceHttpHandler = map[string]ServiceHttpHandler{}
 var mux = http.NewServeMux()
 
 type proxy struct {
-	service *service.Service
-	req     *http.Request
-	w       http.ResponseWriter
+	service  *service.Service
+	req      *http.Request
+	w        http.ResponseWriter
+	duration time.Duration
 }
 
 func Use(name string, middleware ServiceHttpHandler) {
@@ -46,6 +52,96 @@ func Router() http.Handler {
 		}
 		prxy := New(srvce, r, w)
 		prxy.Call(r.Context())
+	})
+
+	mux.HandleFunc("/api/services", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		serviceCollection := slices.Collect(maps.Values(service.Services()))
+		response := shared.HttpResponse{Data: serviceCollection, Message: "todos os serviços", Status: 200}.Json()
+		fmt.Fprint(w, response)
+	})
+	mux.HandleFunc("/api/summaries", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
+		defer cancel()
+		repo := reporitory.New(database.Db())
+		latencies, err := repo.AvgLatency(ctx)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		errRates, err := repo.ErrRate(ctx)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		reqInLastMinute, err := repo.ReqInMinute(ctx, 1)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		reqInLastTenMinutes, err := repo.ReqInMinute(ctx, 10)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		reqInCountByMinutes, err := repo.ReqInMinuteGroupedByMinute(ctx, 10)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		fmt.Fprint(w, httpresponse.SuccessResponse(map[string]interface{}{
+			"latencies":                       latencies,
+			"errRates":                        errRates,
+			"reqInLastMin":                    reqInLastMinute,
+			"reqInLastTenMin":                 reqInLastTenMinutes,
+			"reqLastTenMinutesCountByMinutes": reqInCountByMinutes,
+		}, http.StatusOK, "").Json())
+		return
+	})
+
+	mux.HandleFunc("/api/metrics-of-service", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
+		defer cancel()
+		serviceName := r.URL.Query().Get("service")
+		repo := reporitory.New(database.Db())
+		httpStatusMetrics, err := repo.HttpStatusMetricsOfService(ctx, serviceName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		httpStatusMethodsMetrics, err := repo.HttpMethodsMetricsOfService(ctx, serviceName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		requestLast24Hours, err := repo.ReqInMinuteGroupedByMinuteOfService(ctx, 60, serviceName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		reqLogs, err := repo.AllInLastHourOfService(ctx, serviceName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		durationMetrics, err := repo.DurationMetricsOfService(ctx, serviceName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		fmt.Fprint(w, httpresponse.SuccessResponse(map[string]interface{}{
+			"statusMetrics":       httpStatusMetrics,
+			"methodsMetrics":      httpStatusMethodsMetrics,
+			"requestLastRequests": requestLast24Hours,
+			"logs":                reqLogs,
+			"durationMetrics":     durationMetrics,
+		}, http.StatusOK, "").Json())
+		return
 	})
 	return mux
 }
@@ -110,8 +206,12 @@ func (p *proxy) applyRateLimitChain(handler http.HandlerFunc) http.HandlerFunc {
 			rateLimitConfig.Key = fmt.Sprintf("%s_%s%s_%s", p.service.Name, p.req.Method, pathToCamelcase, id)
 			rateLimiter := ratelimit.NewRateLimiter(rateLimitConfig)
 			if err := rateLimiter.Allow(); err != nil {
-				fmt.Println(err)
 				http.Error(w, err.Error(), http.StatusTooManyRequests)
+				reqStream := stream.NewRequestStream(p, result.Fail(httpresponse.FailResponse(
+					err,
+					http.StatusTooManyRequests,
+				)))
+				stream.Produce(reqStream)
 				return
 			}
 		}
@@ -138,7 +238,13 @@ func (p *proxy) withCircuitBreaker(handler http.HandlerFunc, befores []ServiceHt
 			p.service.CircuitBreaker = cb
 		}
 		if err := p.service.CircuitBreaker.Handle(); err != nil {
-			http.Error(w, err.Error(), 501)
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			p.service.CircuitBreaker.RecordFailure()
+			reqStream := stream.NewRequestStream(p, result.Fail(httpresponse.FailResponse(
+				err,
+				http.StatusBadGateway,
+			)))
+			stream.Produce(reqStream)
 			return
 		}
 		finalHandler(w, r)
@@ -152,7 +258,9 @@ func (p *proxy) makeServiceCall() result.Result[httpresponse.HttpResponse] {
 		return result.Fail(httpresponse.FailResponse(err, http.StatusInternalServerError))
 	}
 	p.setDefaultHeaders(request)
+	reqStart := time.Now()
 	response, err := http.DefaultClient.Do(request)
+	p.setDuration(reqStart)
 	if err != nil {
 		var responseErr result.Result[httpresponse.HttpResponse]
 		if errors.Is(err, ctx.Err()) {
@@ -184,6 +292,8 @@ func (p *proxy) call(w http.ResponseWriter, r *http.Request) {
 		serviceResult := p.makeServiceCall()
 		if !serviceResult.IsSuccess() {
 			http.Error(w, serviceResult.Value().Message, serviceResult.Value().Status)
+			reqStream := stream.NewRequestStream(p, serviceResult)
+			stream.Produce(reqStream)
 			return
 		}
 		fmt.Fprint(w, serviceResult.Value().Json())
@@ -193,9 +303,13 @@ func (p *proxy) call(w http.ResponseWriter, r *http.Request) {
 	retryBackoffResult := retryBackoff.Execute(p.makeServiceCall, p.service.CircuitBreaker)
 	if !retryBackoffResult.IsSuccess() {
 		http.Error(w, retryBackoffResult.Value().Message, 501)
+		reqStream := stream.NewRequestStream(p, retryBackoffResult)
+		stream.Produce(reqStream)
 		return
 	}
 	fmt.Fprint(w, retryBackoffResult.Value().Json())
+	reqStream := stream.NewRequestStream(p, retryBackoffResult)
+	stream.Produce(reqStream)
 }
 
 func (p *proxy) Call(ctx context.Context) {
@@ -208,4 +322,40 @@ func (p *proxy) Call(ctx context.Context) {
 
 func Middlewares() map[string]ServiceHttpHandler {
 	return middlewares
+}
+
+func (p *proxy) Method() string {
+	return p.req.Method
+}
+
+func (p *proxy) Path() string {
+	return p.req.URL.Path
+}
+
+func (p *proxy) ServiceName() string {
+	return p.service.Name
+}
+
+func (p *proxy) StreamHeaders() map[string]string {
+	return map[string]string{
+		stream.HeaderContentType: p.req.Header.Get(stream.HeaderContentType),
+		stream.HeaderUserAgent:   p.req.Header.Get(stream.HeaderUserAgent),
+	}
+}
+
+func (p *proxy) HeadersToJson() string {
+	data, _ := json.Marshal(p.StreamHeaders())
+	return fmt.Sprintf("%s", data)
+}
+
+func (p *proxy) Duration() time.Duration {
+	return p.duration
+}
+
+func (p *proxy) setDuration(start time.Time) {
+	p.duration = time.Since(start)
+}
+
+func (p *proxy) Host() string {
+	return p.req.Host
 }
