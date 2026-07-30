@@ -32,3 +32,14 @@ func (h HttpResponse) Json() string {
 	responseb, _ := json.Marshal(response)
 	return string(responseb)
 }
+
+func ToJSON(message string, status int, success bool, data interface{}) string {
+	response := map[string]interface{}{
+		"data":    data,
+		"message": message,
+		"status":  status,
+		"success": success,
+	}
+	responseb, _ := json.Marshal(response)
+	return string(responseb)
+}

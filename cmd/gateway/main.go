@@ -4,32 +4,22 @@ import (
 	"log"
 	"net/http"
 
+	apigateway "github.com/serge1997/apigateway/internal/apiGateway"
 	"github.com/serge1997/apigateway/internal/proxy"
 )
 
 func main() {
-	proxy.Use("logger", func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			log.Printf("%s - %s", r.Method, r.URL.Path)
-			next(w, r)
-		}
+	gtw := apigateway.New(apigateway.APIGatewayConfig{})
+	gtw.UseGlobal("logger", func(ctx *proxy.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+		log.Printf("%s - %s", ctx.Method(), ctx.Path())
+		return next, nil
 	})
-	proxy.Use("auth_jwt", func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			token := r.Header.Get("Authorization")
-			if token == "" {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			next(w, r)
+	gtw.Use("auth_jwt", func(ctx *proxy.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+		token := ctx.Req().Header.Get("Authorization")
+		if token == "" {
+			return next, ctx.Unauthorized()
 		}
+		return next, nil
 	})
-	proxy.Use("cors", func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			next(w, r)
-		}
-	})
-	log.Fatal(http.ListenAndServe(":9091", proxy.Router()))
+	log.Fatal(gtw.Listen())
 }
