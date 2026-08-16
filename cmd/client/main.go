@@ -45,7 +45,7 @@ func doRequest(ctx context.Context, wg *sync.WaitGroup) {
 	}
 	request.Header.Set("x-service-name", "users")
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "")
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		fmt.Println("erro: ", err)
@@ -60,5 +60,5 @@ func doRequest(ctx context.Context, wg *sync.WaitGroup) {
 	var data interface{}
 	json.NewDecoder(response.Body).Decode(&data)
 	//b, _ := json.MarshalIndent(data, "", " ")
-	fmt.Println(data)
+	fmt.Println(response.StatusCode)
 }

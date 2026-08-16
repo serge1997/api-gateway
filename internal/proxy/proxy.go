@@ -91,7 +91,13 @@ func (p *Proxy) buildMiddlewaresChain(handler http.HandlerFunc, afterMiddlewares
 	for _, middleware := range afterMiddlewares {
 		handler_, err := middleware(p.Ctx, finalHandler)
 		if err != nil {
-			http.Error(p.Ctx.Writer(), p.Ctx.Err(err, 501).Error(), 501)
+			statusCode := p.Ctx.GetStatusString(err.Error())
+			http.Error(p.Ctx.Writer(), p.Ctx.Err(err, statusCode).Error(), 501)
+			mdlwsStream := stream.NewRequestStream(p, result.Fail(httpresponse.FailResponse(
+				err,
+				statusCode,
+			)))
+			stream.Produce(mdlwsStream)
 			return nil
 		}
 		finalHandler = handler_
@@ -187,10 +193,10 @@ func (p *Proxy) makeServiceCall() result.Result[httpresponse.HttpResponse] {
 	var clientResponse shared.HttpResponse
 	if err = json.NewDecoder(response.Body).Decode(&clientResponse); err != nil {
 		errMesage := fmt.Errorf("erro on decode service response. detail: %v", err)
-		return result.Fail(httpresponse.FailResponse(errMesage, 501))
+		return result.Fail(httpresponse.FailResponse(errMesage, http.StatusInternalServerError))
 	}
 	if response.StatusCode > 299 {
-		return result.Fail(httpresponse.FailResponse(fmt.Errorf("%s", clientResponse.Message), 501))
+		return result.Fail(httpresponse.FailResponse(fmt.Errorf("%s", clientResponse.Message), http.StatusInternalServerError))
 	}
 	if p.service.CircuitBreaker != nil {
 		p.service.CircuitBreaker.RecordSuccess()
@@ -212,7 +218,7 @@ func (p *Proxy) call(w http.ResponseWriter, r *http.Request) {
 	retryBackoff := retry.New(p.service.RetryBackoff)
 	retryBackoffResult := retryBackoff.Execute(p.makeServiceCall, p.service.CircuitBreaker)
 	if !retryBackoffResult.IsSuccess() {
-		http.Error(w, retryBackoffResult.Value().Message, 501)
+		http.Error(w, retryBackoffResult.Value().Message, http.StatusInternalServerError)
 		reqStream := stream.NewRequestStream(p, retryBackoffResult)
 		stream.Produce(reqStream)
 		return

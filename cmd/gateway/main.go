@@ -18,6 +18,10 @@ func main() {
 		log.Printf("%s - %s", ctx.Method(), ctx.Path())
 		return next, nil
 	})
+	gtw.UseGlobal("permission", func(ctx *proxy.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+		//return nil, ctx.Err(fmt.Errorf("permission denied"), 403)
+		return next, nil
+	})
 	gtw.Use("auth_jwt", func(ctx *proxy.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
 		token := ctx.Req().Header.Get("Authorization")
 		if token == "" {

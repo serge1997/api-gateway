@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,4 +55,16 @@ func (c *Context) Host() string {
 
 func (c *Context) Header(key string) string {
 	return c.req.Header.Get(key)
+}
+
+func (c *Context) GetStatusString(str string) int {
+	var status = 501
+	var errMap map[string]any
+	if err := json.Unmarshal([]byte(str), &errMap); err != nil {
+		return status
+	}
+	if value, ok := errMap["status"]; ok {
+		status = int(value.(float64))
+	}
+	return status
 }
