@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -21,16 +22,17 @@ import (
 type ServiceHttpHandler func(http.HandlerFunc) http.HandlerFunc
 type MiddlewareHandler func(ctx *Context, next http.HandlerFunc) (http.HandlerFunc, error)
 type MiddlewareHandlerMap map[string]MiddlewareHandler
+type CombinedMiddlewares = map[string]MiddlewareHandlerMap
 
 var middlewares map[string]ServiceHttpHandler = map[string]ServiceHttpHandler{}
 
 type Proxy struct {
 	service     *service.Service
 	Ctx         *Context
-	middlewares map[string]MiddlewareHandler
+	middlewares CombinedMiddlewares
 }
 
-func New(service *service.Service, middlewares map[string]MiddlewareHandler, w http.ResponseWriter, r *http.Request) *Proxy {
+func New(service *service.Service, middlewares CombinedMiddlewares, w http.ResponseWriter, r *http.Request) *Proxy {
 	return &Proxy{service: service, Ctx: &Context{r, w}, middlewares: middlewares}
 }
 
@@ -61,9 +63,16 @@ func (p *Proxy) setDefaultHeaders(client *http.Request) {
 }
 
 func (p *Proxy) splitMiddlewares() (before, after []MiddlewareHandler) {
+	serviceMiddlewares := p.middlewares["service"]
+	globalMdlwsName := slices.Collect(maps.Keys(p.middlewares["global"]))
+	globalMdlwsHandler := slices.Collect(maps.Values(p.middlewares["global"]))
+	after = append(after, globalMdlwsHandler...)
 	for _, name := range p.service.Middlewares {
-		handler, ok := p.middlewares[name]
+		handler, ok := serviceMiddlewares[name]
 		if !ok {
+			continue
+		}
+		if slices.Contains(globalMdlwsName, name) {
 			continue
 		}
 		if slices.Contains(p.service.CbConfig.Before, name) {
@@ -99,7 +108,6 @@ func (p *Proxy) applyRateLimitChain(handler http.HandlerFunc) http.HandlerFunc {
 			rateLimitConfig.Key = fmt.Sprintf("%s_%s%s_%s", p.service.Name, p.Ctx.Method(), pathToCamelcase, id)
 			rateLimiter := ratelimit.NewRateLimiter(rateLimitConfig)
 			if err := rateLimiter.Allow(); err != nil {
-				fmt.Println(err)
 				http.Error(w, err.Error(), http.StatusTooManyRequests)
 				return
 			}
@@ -197,6 +205,9 @@ func (p *Proxy) Call(ctx context.Context) {
 	handler := p.withCircuitBreaker(p.call, before)
 	handler = p.applyRateLimitChain(handler)
 	handler = p.buildMiddlewaresChain(handler, after)
+	if handler == nil {
+		return
+	}
 	handler(p.Ctx.Writer(), p.Ctx.Req())
 }
 

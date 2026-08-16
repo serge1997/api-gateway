@@ -8,10 +8,11 @@ import (
 )
 
 type Handler = proxy.MiddlewareHandler
-type MiddlewareMap map[string]Handler
+type MiddlewareMap = proxy.MiddlewareHandlerMap
 
 var middlewares MiddlewareMap = map[string]Handler{}
 var globales MiddlewareMap = map[string]Handler{}
+var combined proxy.CombinedMiddlewares = map[string]proxy.MiddlewareHandlerMap{}
 var cache = map[string]MiddlewareMap{}
 var mu sync.RWMutex
 
@@ -53,5 +54,14 @@ func MiddlewaresOf(s *service.Service) MiddlewareMap {
 			mdlws[mdlwName] = h
 		}
 	}
+	cache[s.Name] = mdlws
 	return mdlws
+}
+
+func CombinedGlobalWithService(s *service.Service) proxy.CombinedMiddlewares {
+	serviceMdlws := MiddlewaresOf(s)
+	combined := proxy.CombinedMiddlewares{}
+	combined["service"] = serviceMdlws
+	combined["global"] = globales
+	return combined
 }

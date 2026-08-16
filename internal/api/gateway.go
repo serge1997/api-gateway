@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/serge1997/apigateway/internal/middleware"
+
 	"github.com/serge1997/apigateway/internal/proxy"
 	"github.com/serge1997/apigateway/internal/service"
 )
@@ -15,7 +16,7 @@ func ServicesHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "service not found", 404)
 		return
 	}
-	mdws := middleware.MiddlewaresOf(srvce)
-	prxy := proxy.New(srvce, mdws, w, r)
+	combindedMdlws := middleware.CombinedGlobalWithService(srvce)
+	prxy := proxy.New(srvce, combindedMdlws, w, r)
 	prxy.Call(r.Context())
 }

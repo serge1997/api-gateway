@@ -6,10 +6,14 @@ import (
 
 	apigateway "github.com/serge1997/apigateway/internal/apiGateway"
 	"github.com/serge1997/apigateway/internal/proxy"
+	"github.com/serge1997/apigateway/internal/router"
+	"github.com/serge1997/apigateway/internal/server"
 )
 
 func main() {
-	gtw := apigateway.New(apigateway.APIGatewayConfig{})
+	gtw := apigateway.New(apigateway.Config{})
+	srv := server.New(gtw, router.New())
+
 	gtw.UseGlobal("logger", func(ctx *proxy.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
 		log.Printf("%s - %s", ctx.Method(), ctx.Path())
 		return next, nil
@@ -17,9 +21,9 @@ func main() {
 	gtw.Use("auth_jwt", func(ctx *proxy.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
 		token := ctx.Req().Header.Get("Authorization")
 		if token == "" {
-			return next, ctx.Unauthorized()
+			return nil, ctx.Unauthorized()
 		}
 		return next, nil
 	})
-	log.Fatal(gtw.Listen())
+	log.Fatal(srv.Listen())
 }
