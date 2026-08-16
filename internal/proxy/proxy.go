@@ -12,9 +12,7 @@ import (
 	"time"
 
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
-	"github.com/serge1997/apigateway/internal/database"
 	ratelimit "github.com/serge1997/apigateway/internal/rateLimit"
-	"github.com/serge1997/apigateway/internal/reporitory"
 	"github.com/serge1997/apigateway/internal/retry"
 	"github.com/serge1997/apigateway/internal/service"
 	"github.com/serge1997/apigateway/internal/stream"
@@ -34,125 +32,16 @@ type Proxy struct {
 	service     *service.Service
 	Ctx         *Context
 	middlewares CombinedMiddlewares
+	duration    time.Duration
 }
 
 func New(service *service.Service, middlewares CombinedMiddlewares, w http.ResponseWriter, r *http.Request) *Proxy {
 	return &Proxy{service: service, Ctx: &Context{r, w}, middlewares: middlewares}
 }
 
-<<<<<<< HEAD
-func Router() http.Handler {
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		serviceName := r.Header.Get("x-service-name")
-		srvce := service.Get(serviceName)
-		if srvce == nil {
-			fmt.Fprint(w, "service not found")
-			return
-		}
-		prxy := New(srvce, r, w)
-		prxy.Call(r.Context())
-	})
-
-	mux.HandleFunc("/api/services", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Content-Type", "application/json")
-		serviceCollection := slices.Collect(maps.Values(service.Services()))
-		response := shared.HttpResponse{Data: serviceCollection, Message: "todos os serviços", Status: 200}.Json()
-		fmt.Fprint(w, response)
-	})
-	mux.HandleFunc("/api/summaries", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Content-Type", "application/json")
-		ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
-		defer cancel()
-		repo := reporitory.New(database.Db())
-		latencies, err := repo.AvgLatency(ctx)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		errRates, err := repo.ErrRate(ctx)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		reqInLastMinute, err := repo.ReqInMinute(ctx, 1)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		reqInLastTenMinutes, err := repo.ReqInMinute(ctx, 10)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		reqInCountByMinutes, err := repo.ReqInMinuteGroupedByMinute(ctx, 10)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		fmt.Fprint(w, httpresponse.SuccessResponse(map[string]interface{}{
-			"latencies":                       latencies,
-			"errRates":                        errRates,
-			"reqInLastMin":                    reqInLastMinute,
-			"reqInLastTenMin":                 reqInLastTenMinutes,
-			"reqLastTenMinutesCountByMinutes": reqInCountByMinutes,
-		}, http.StatusOK, "").Json())
-		return
-	})
-
-	mux.HandleFunc("/api/metrics-of-service", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Content-Type", "application/json")
-		ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
-		defer cancel()
-		serviceName := r.URL.Query().Get("service")
-		repo := reporitory.New(database.Db())
-		httpStatusMetrics, err := repo.HttpStatusMetricsOfService(ctx, serviceName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		httpStatusMethodsMetrics, err := repo.HttpMethodsMetricsOfService(ctx, serviceName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		requestLast24Hours, err := repo.ReqInMinuteGroupedByMinuteOfService(ctx, 60, serviceName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		reqLogs, err := repo.AllInLastHourOfService(ctx, serviceName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		durationMetrics, err := repo.DurationMetricsOfService(ctx, serviceName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		fmt.Fprint(w, httpresponse.SuccessResponse(map[string]interface{}{
-			"statusMetrics":       httpStatusMetrics,
-			"methodsMetrics":      httpStatusMethodsMetrics,
-			"requestLastRequests": requestLast24Hours,
-			"logs":                reqLogs,
-			"durationMetrics":     durationMetrics,
-		}, http.StatusOK, "").Json())
-		return
-	})
-	return mux
-}
-
-func (p *proxy) FullDomainePath() string {
-	path := p.req.URL.Path
-	query := p.req.URL.RawQuery
-=======
 func (p *Proxy) FullDomainePath() string {
 	path := p.Ctx.Req().URL.Path
 	query := p.Ctx.Req().URL.RawQuery
->>>>>>> gateway-cors
 	return fmt.Sprintf("%s%s?%s", p.service.Target, path, query)
 }
 func (p *Proxy) Jwt() (string, error) {
@@ -348,38 +237,38 @@ func Middlewares() map[string]ServiceHttpHandler {
 	return middlewares
 }
 
-func (p *proxy) Method() string {
-	return p.req.Method
+func (p *Proxy) Method() string {
+	return p.Ctx.Method()
 }
 
-func (p *proxy) Path() string {
-	return p.req.URL.Path
+func (p *Proxy) Path() string {
+	return p.Ctx.Path()
 }
 
-func (p *proxy) ServiceName() string {
+func (p *Proxy) ServiceName() string {
 	return p.service.Name
 }
 
-func (p *proxy) StreamHeaders() map[string]string {
+func (p *Proxy) StreamHeaders() map[string]string {
 	return map[string]string{
-		stream.HeaderContentType: p.req.Header.Get(stream.HeaderContentType),
-		stream.HeaderUserAgent:   p.req.Header.Get(stream.HeaderUserAgent),
+		stream.HeaderContentType: p.Ctx.Header(stream.HeaderContentType),
+		stream.HeaderUserAgent:   p.Ctx.Header(stream.HeaderUserAgent),
 	}
 }
 
-func (p *proxy) HeadersToJson() string {
+func (p *Proxy) HeadersToJson() string {
 	data, _ := json.Marshal(p.StreamHeaders())
 	return fmt.Sprintf("%s", data)
 }
 
-func (p *proxy) Duration() time.Duration {
+func (p *Proxy) Duration() time.Duration {
 	return p.duration
 }
 
-func (p *proxy) setDuration(start time.Time) {
+func (p *Proxy) setDuration(start time.Time) {
 	p.duration = time.Since(start)
 }
 
-func (p *proxy) Host() string {
-	return p.req.Host
+func (p *Proxy) Host() string {
+	return p.Ctx.Host()
 }

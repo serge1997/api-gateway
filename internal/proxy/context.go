@@ -47,3 +47,11 @@ func (c *Context) Err(err error, status int) error {
 		string(debug.Stack()),
 	))
 }
+
+func (c *Context) Host() string {
+	return c.req.Host
+}
+
+func (c *Context) Header(key string) string {
+	return c.req.Header.Get(key)
+}
