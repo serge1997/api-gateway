@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -18,9 +19,10 @@ func main() {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	wg.Add(1)
-	for range 1 {
-		time.Sleep(time.Millisecond * 100)
+	wg.Add(20)
+	for range 20 {
+		delay := time.Duration(rand.Intn(9)+1*1000) * time.Millisecond
+		time.Sleep(delay)
 		go func() {
 			doRequest(ctx, &wg)
 		}()
