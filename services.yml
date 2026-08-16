@@ -1,3 +1,7 @@
+server:
+  listen_addr: "9091"
+  timeout: "6s"
+  cors_allowed_origins: ["*"]
 services:
   users:
     name: users
@@ -13,9 +17,9 @@ services:
         burst: 1
       - type: window
         limit: 60
-        interval: "1m" #60 request in 1min, if empty default -> "1m"
+        interval: "1m"
     circuit_breaker:
-      failure_threshold: 2 #falhas antes abrir
+      failure_threshold: 2
       retry_timeout: "30s"
       before:
         - logger

@@ -24,24 +24,23 @@ import (
 )
 
 type ServiceHttpHandler func(http.HandlerFunc) http.HandlerFunc
+type MiddlewareHandler func(ctx *Context, next http.HandlerFunc) (http.HandlerFunc, error)
+type MiddlewareHandlerMap map[string]MiddlewareHandler
+type CombinedMiddlewares = map[string]MiddlewareHandlerMap
 
 var middlewares map[string]ServiceHttpHandler = map[string]ServiceHttpHandler{}
-var mux = http.NewServeMux()
 
-type proxy struct {
-	service  *service.Service
-	req      *http.Request
-	w        http.ResponseWriter
-	duration time.Duration
+type Proxy struct {
+	service     *service.Service
+	Ctx         *Context
+	middlewares CombinedMiddlewares
 }
 
-func Use(name string, middleware ServiceHttpHandler) {
-	middlewares[name] = middleware
-}
-func New(service *service.Service, r *http.Request, w http.ResponseWriter) *proxy {
-	return &proxy{service: service, req: r, w: w}
+func New(service *service.Service, middlewares CombinedMiddlewares, w http.ResponseWriter, r *http.Request) *Proxy {
+	return &Proxy{service: service, Ctx: &Context{r, w}, middlewares: middlewares}
 }
 
+<<<<<<< HEAD
 func Router() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		serviceName := r.Header.Get("x-service-name")
@@ -149,10 +148,15 @@ func Router() http.Handler {
 func (p *proxy) FullDomainePath() string {
 	path := p.req.URL.Path
 	query := p.req.URL.RawQuery
+=======
+func (p *Proxy) FullDomainePath() string {
+	path := p.Ctx.Req().URL.Path
+	query := p.Ctx.Req().URL.RawQuery
+>>>>>>> gateway-cors
 	return fmt.Sprintf("%s%s?%s", p.service.Target, path, query)
 }
-func (p *proxy) Jwt() (string, error) {
-	fullToken := p.req.Header.Get("Authorization")
+func (p *Proxy) Jwt() (string, error) {
+	fullToken := p.Ctx.Req().Header.Get("Authorization")
 	if fullToken != "" {
 		fullTokenSplited := strings.Split(fullToken, " ")
 		if len(fullTokenSplited) < 2 {
@@ -163,19 +167,26 @@ func (p *proxy) Jwt() (string, error) {
 	return "", nil
 }
 
-func (p *proxy) setDefaultHeaders(client *http.Request) {
-	jwt := p.req.Header.Get("Authorization")
-	contentType := p.req.Header.Get("Content-Type")
+func (p *Proxy) setDefaultHeaders(client *http.Request) {
+	jwt := p.Ctx.Req().Header.Get("Authorization")
+	contentType := p.Ctx.Req().Header.Get("Content-Type")
 	client.Header.Set("Content-Type", contentType)
 	if jwt != "" {
 		client.Header.Set("Autorization", jwt)
 	}
 }
 
-func (p *proxy) splitMiddlewares() (before, after []ServiceHttpHandler) {
+func (p *Proxy) splitMiddlewares() (before, after []MiddlewareHandler) {
+	serviceMiddlewares := p.middlewares["service"]
+	globalMdlwsName := slices.Collect(maps.Keys(p.middlewares["global"]))
+	globalMdlwsHandler := slices.Collect(maps.Values(p.middlewares["global"]))
+	after = append(after, globalMdlwsHandler...)
 	for _, name := range p.service.Middlewares {
-		handler, ok := middlewares[name]
+		handler, ok := serviceMiddlewares[name]
 		if !ok {
+			continue
+		}
+		if slices.Contains(globalMdlwsName, name) {
 			continue
 		}
 		if slices.Contains(p.service.CbConfig.Before, name) {
@@ -186,14 +197,19 @@ func (p *proxy) splitMiddlewares() (before, after []ServiceHttpHandler) {
 	}
 	return
 }
-func (p *proxy) buildMiddlewaresChain(handler http.HandlerFunc, afterMiddlewares []ServiceHttpHandler) http.HandlerFunc {
+func (p *Proxy) buildMiddlewaresChain(handler http.HandlerFunc, afterMiddlewares []MiddlewareHandler) http.HandlerFunc {
 	finalHandler := handler
 	for _, middleware := range afterMiddlewares {
-		finalHandler = middleware(finalHandler)
+		handler_, err := middleware(p.Ctx, finalHandler)
+		if err != nil {
+			http.Error(p.Ctx.Writer(), p.Ctx.Err(err, 501).Error(), 501)
+			return nil
+		}
+		finalHandler = handler_
 	}
 	return finalHandler
 }
-func (p *proxy) applyRateLimitChain(handler http.HandlerFunc) http.HandlerFunc {
+func (p *Proxy) applyRateLimitChain(handler http.HandlerFunc) http.HandlerFunc {
 	serviceRateLimits := p.service.RateLimits
 	if len(serviceRateLimits) == 0 {
 		return handler
@@ -202,8 +218,8 @@ func (p *proxy) applyRateLimitChain(handler http.HandlerFunc) http.HandlerFunc {
 		for _, rateLimitConfig := range serviceRateLimits {
 			token, _ := p.Jwt()                     //return empty jwt err in rateLimiter.Allow()
 			id, _ := shared.ExtractIDFromJWT(token) // return empty jwt err in rateLimiter.Allow()
-			pathToCamelcase := strings.ReplaceAll(p.req.URL.Path, "/", "_")
-			rateLimitConfig.Key = fmt.Sprintf("%s_%s%s_%s", p.service.Name, p.req.Method, pathToCamelcase, id)
+			pathToCamelcase := strings.ReplaceAll(p.Ctx.Path(), "/", "_")
+			rateLimitConfig.Key = fmt.Sprintf("%s_%s%s_%s", p.service.Name, p.Ctx.Method(), pathToCamelcase, id)
 			rateLimiter := ratelimit.NewRateLimiter(rateLimitConfig)
 			if err := rateLimiter.Allow(); err != nil {
 				http.Error(w, err.Error(), http.StatusTooManyRequests)
@@ -218,21 +234,26 @@ func (p *proxy) applyRateLimitChain(handler http.HandlerFunc) http.HandlerFunc {
 		handler(w, r)
 	}
 }
-func (p *proxy) withCircuitBreaker(handler http.HandlerFunc, befores []ServiceHttpHandler) http.HandlerFunc {
+func (p *Proxy) withCircuitBreaker(handler http.HandlerFunc, befores []MiddlewareHandler) http.HandlerFunc {
 	finalHandler := handler
 	if p.service.CbConfig == nil {
 		return handler
 	}
 	if len(befores) > 0 {
 		for _, beforeHandler := range befores {
-			finalHandler = beforeHandler(finalHandler)
+			hander_, err := beforeHandler(p.Ctx, finalHandler)
+			if err != nil {
+				http.Error(p.Ctx.Writer(), p.Ctx.Err(err, 501).Error(), 501)
+				return nil
+			}
+			finalHandler = hander_
 		}
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if p.service.CircuitBreaker == nil {
 			cb, err := circuitbreaker.New(p.service.CbConfig)
 			if err != nil {
-				http.Error(w, err.Error(), 501)
+				http.Error(w, p.Ctx.Err(err, http.StatusInternalServerError).Error(), http.StatusInternalServerError)
 				return
 			}
 			p.service.CircuitBreaker = cb
@@ -250,10 +271,10 @@ func (p *proxy) withCircuitBreaker(handler http.HandlerFunc, befores []ServiceHt
 		finalHandler(w, r)
 	}
 }
-func (p *proxy) makeServiceCall() result.Result[httpresponse.HttpResponse] {
-	ctx, cancel := context.WithTimeout(p.req.Context(), p.service.GetTimeout())
+func (p *Proxy) makeServiceCall() result.Result[httpresponse.HttpResponse] {
+	ctx, cancel := context.WithTimeout(p.Ctx.req.Context(), p.service.GetTimeout())
 	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, p.req.Method, p.FullDomainePath(), p.req.Body)
+	request, err := http.NewRequestWithContext(ctx, p.Ctx.Method(), p.FullDomainePath(), p.Ctx.Body())
 	if err != nil {
 		return result.Fail(httpresponse.FailResponse(err, http.StatusInternalServerError))
 	}
@@ -287,7 +308,7 @@ func (p *proxy) makeServiceCall() result.Result[httpresponse.HttpResponse] {
 	}
 	return result.Ok(httpresponse.SuccessResponse(clientResponse.Data, http.StatusOK, clientResponse.Message))
 }
-func (p *proxy) call(w http.ResponseWriter, r *http.Request) {
+func (p *Proxy) call(w http.ResponseWriter, r *http.Request) {
 	if !p.service.HasRetryBackoffConfigured() {
 		serviceResult := p.makeServiceCall()
 		if !serviceResult.IsSuccess() {
@@ -312,12 +333,15 @@ func (p *proxy) call(w http.ResponseWriter, r *http.Request) {
 	stream.Produce(reqStream)
 }
 
-func (p *proxy) Call(ctx context.Context) {
+func (p *Proxy) Call(ctx context.Context) {
 	before, after := p.splitMiddlewares()
 	handler := p.withCircuitBreaker(p.call, before)
 	handler = p.applyRateLimitChain(handler)
 	handler = p.buildMiddlewaresChain(handler, after)
-	handler(p.w, p.req)
+	if handler == nil {
+		return
+	}
+	handler(p.Ctx.Writer(), p.Ctx.Req())
 }
 
 func Middlewares() map[string]ServiceHttpHandler {
