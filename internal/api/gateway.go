@@ -3,15 +3,15 @@ package api
 import (
 	"net/http"
 
+	apigateway "github.com/serge1997/apigateway/internal/apiGateway"
 	"github.com/serge1997/apigateway/internal/middleware"
 
 	"github.com/serge1997/apigateway/internal/proxy"
-	"github.com/serge1997/apigateway/internal/service"
 )
 
 func ServicesHandler(w http.ResponseWriter, r *http.Request) {
 	serviceName := r.Header.Get("x-service-name")
-	srvce := service.Get(serviceName)
+	srvce := apigateway.GetService(serviceName)
 	if srvce == nil {
 		http.Error(w, "service not found", 404)
 		return

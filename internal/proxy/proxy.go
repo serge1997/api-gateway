@@ -12,6 +12,7 @@ import (
 	"time"
 
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
+	"github.com/serge1997/apigateway/internal/contracts"
 	ratelimit "github.com/serge1997/apigateway/internal/rateLimit"
 	"github.com/serge1997/apigateway/internal/retry"
 	"github.com/serge1997/apigateway/internal/service"
@@ -22,7 +23,7 @@ import (
 )
 
 type ServiceHttpHandler func(http.HandlerFunc) http.HandlerFunc
-type MiddlewareHandler func(ctx *Context, next http.HandlerFunc) (http.HandlerFunc, error)
+type MiddlewareHandler func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error)
 type MiddlewareHandlerMap map[string]MiddlewareHandler
 type CombinedMiddlewares = map[string]MiddlewareHandlerMap
 

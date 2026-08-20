@@ -2,6 +2,18 @@ server:
   listen_addr: "9091"
   timeout: "6s"
   cors_allowed_origins: ["*"]
+  middlewares:
+      - cors
+      - logger
+circuit_breaker:
+    failure_threshold: 2
+    retry_timeout: "30s"
+    before:
+      - logger
+retry:
+    attempts: 3
+    backoff: exponential
+    delay: "400ms"
 services:
   users:
     name: users
@@ -9,8 +21,6 @@ services:
     target: http://localhost:8000/api
     middlewares:
       - auth_jwt
-      - cors
-      - logger
     rate_limits:
       - type: bucket
         rate: 20
@@ -18,14 +28,5 @@ services:
       - type: window
         limit: 60
         interval: "1m"
-    circuit_breaker:
-      failure_threshold: 2
-      retry_timeout: "30s"
-      before:
-        - logger
-    retry:
-      attempts: 3
-      backoff: exponential
-      delay: "400ms"
 
     

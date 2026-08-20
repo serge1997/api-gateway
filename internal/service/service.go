@@ -10,7 +10,6 @@ import (
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
 	ratelimit "github.com/serge1997/apigateway/internal/rateLimit"
 	"github.com/serge1997/apigateway/internal/retry"
-	"github.com/serge1997/apigateway/shared"
 )
 
 var serviceHeaderName string = "x-service-name"
@@ -18,14 +17,7 @@ var defaultTimeout = time.Second * 5
 var services map[string]*Service
 
 func init() {
-	services, err := shared.LoadServiceYml()
-	if err != nil {
-		panic(err)
-	}
 
-	if err := Parse(services); err != nil {
-		panic(err)
-	}
 }
 
 type Service struct {
@@ -94,4 +86,16 @@ func (s *Service) HasRetryBackoffConfigured() bool {
 		return false
 	}
 	return true
+}
+
+func (s *Service) CbIsNil() bool {
+	return s.CbConfig == nil
+}
+
+func (s *Service) RateLimitsIsNil() bool {
+	return s.RateLimits == nil
+}
+
+func (s *Service) RetryIsNil() bool {
+	return s.RetryBackoff == nil
 }
