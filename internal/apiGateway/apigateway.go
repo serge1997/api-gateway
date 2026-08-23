@@ -21,7 +21,7 @@ type apiGateway struct {
 	RateLimits           []*ratelimit.Config            `yaml:"rate_limits" json:"rate_limits"`
 }
 
-func New(cfg Config) *apiGateway {
+func New() *apiGateway {
 	gtw, err := parse()
 	if err != nil || gtw == nil {
 		panic(err)
@@ -40,11 +40,11 @@ func (a *apiGateway) UseGlobal(name string, handler middleware.Handler) {
 	middleware.RegisterGlobal(name, handler)
 }
 
-func CORSAllowedOrigins() []string {
+func Cors() []string {
 	return cORSAllowedOrigins
 }
 
-func HasCORSAllowedOrigins() bool {
+func HasCORS() bool {
 	return len(cORSAllowedOrigins) >= 1
 }
 

@@ -62,7 +62,7 @@ func (p *Proxy) setDefaultHeaders(client *http.Request) {
 	contentType := p.Ctx.Req().Header.Get("Content-Type")
 	client.Header.Set("Content-Type", contentType)
 	if jwt != "" {
-		client.Header.Set("Autorization", jwt)
+		client.Header.Set("Authorization", jwt)
 	}
 }
 
@@ -111,21 +111,26 @@ func (p *Proxy) applyRateLimitChain(handler http.HandlerFunc) http.HandlerFunc {
 		return handler
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		for _, rateLimitConfig := range serviceRateLimits {
-			token, _ := p.Jwt()                     //return empty jwt err in rateLimiter.Allow()
-			id, _ := shared.ExtractIDFromJWT(token) // return empty jwt err in rateLimiter.Allow()
-			pathToCamelcase := strings.ReplaceAll(p.Ctx.Path(), "/", "_")
-			rateLimitConfig.Key = fmt.Sprintf("%s_%s%s_%s", p.service.Name, p.Ctx.Method(), pathToCamelcase, id)
-			rateLimiter := ratelimit.NewRateLimiter(rateLimitConfig)
-			if err := rateLimiter.Allow(); err != nil {
-				http.Error(w, err.Error(), http.StatusTooManyRequests)
-				reqStream := stream.NewRequestStream(p, result.Fail(httpresponse.FailResponse(
-					err,
-					http.StatusTooManyRequests,
-				)))
-				stream.Produce(reqStream)
-				return
+		if len(p.service.RateLimiters) < 1 {
+			var limitersSlice []ratelimit.RateLimiter
+			for _, rateLimitConfig := range serviceRateLimits {
+				token, _ := p.Jwt()
+				id, _ := shared.ExtractIDFromJWT(token)
+				pathToCamelcase := strings.ReplaceAll(p.Ctx.Path(), "/", "_")
+				rateLimitConfig.Key = fmt.Sprintf("%s_%s%s_%s", p.service.Name, p.Ctx.Method(), pathToCamelcase, id)
+				rateLimiter := ratelimit.NewRateLimiter(rateLimitConfig)
+				limitersSlice = append(limitersSlice, rateLimiter)
 			}
+			p.service.RateLimiters = limitersSlice
+		}
+		if err := p.service.Allow(); err != nil {
+			http.Error(w, err.Error(), http.StatusTooManyRequests)
+			reqStream := stream.NewRequestStream(p, result.Fail(httpresponse.FailResponse(
+				err,
+				http.StatusTooManyRequests,
+			)))
+			stream.Produce(reqStream)
+			return
 		}
 		handler(w, r)
 	}
@@ -155,7 +160,7 @@ func (p *Proxy) withCircuitBreaker(handler http.HandlerFunc, befores []Middlewar
 			p.service.CircuitBreaker = cb
 		}
 		if err := p.service.CircuitBreaker.Handle(); err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			http.Error(w, p.Ctx.Err(err, http.StatusBadGateway).Error(), http.StatusBadGateway)
 			p.service.CircuitBreaker.RecordFailure()
 			reqStream := stream.NewRequestStream(p, result.Fail(httpresponse.FailResponse(
 				err,
@@ -217,9 +222,9 @@ func (p *Proxy) call(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	retryBackoff := retry.New(p.service.RetryBackoff)
-	retryBackoffResult := retryBackoff.Execute(p.makeServiceCall, p.service.CircuitBreaker)
+	retryBackoffResult := retryBackoff.Execute(p.makeServiceCall, p.service)
 	if !retryBackoffResult.IsSuccess() {
-		http.Error(w, retryBackoffResult.Value().Message, http.StatusInternalServerError)
+		http.Error(w, retryBackoffResult.Value().Json(), p.Ctx.GetStatusString(retryBackoffResult.Value().Json()))
 		reqStream := stream.NewRequestStream(p, retryBackoffResult)
 		stream.Produce(reqStream)
 		return

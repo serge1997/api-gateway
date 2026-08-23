@@ -6,6 +6,7 @@ import (
 	"time"
 
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
+	"github.com/serge1997/apigateway/internal/contracts"
 	httpresponse "github.com/serge1997/apigateway/shared/httpResponse"
 	"github.com/serge1997/apigateway/shared/result"
 )
@@ -14,21 +15,29 @@ type exponentialBackoff struct {
 	retryBackoff
 }
 
-func (e *exponentialBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result.Result[httpresponse.HttpResponse] {
+func (e *exponentialBackoff) Execute(op Op, service contracts.Service) result.Result[httpresponse.HttpResponse] {
 	var expResult result.Result[httpresponse.HttpResponse]
 	for at := 1; at <= int(e.config.Attempt()); at++ {
-		if cb != nil && cb.IsOpen() {
+		if !service.CbIsNil() && service.Cb().IsOpen() {
 			return result.Fail(httpresponse.FailResponse(
 				circuitbreaker.ErrUnacessibleService,
 				http.StatusServiceUnavailable),
 			)
 		}
+		//the proxy check rate limit so here
+		// do the ckeck after the first attempts
+		if at > 1 {
+			if err := service.Allow(); err != nil {
+				fmt.Println(err)
+				return result.Fail(httpresponse.FailResponse(err, http.StatusTooManyRequests))
+			}
+		}
 		expResult = op()
 		if expResult.IsSuccess() {
-			e.recordCbSuccess(cb)
+			e.recordCbSuccess(service.Cb())
 			return expResult
 		}
-		e.recordCbFailure(cb)
+		e.recordCbFailure(service.Cb())
 		if at == int(e.config.Attempts) {
 			break
 		}

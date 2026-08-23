@@ -5,11 +5,17 @@ import (
 
 	apigateway "github.com/serge1997/apigateway/internal/apiGateway"
 	"github.com/serge1997/apigateway/internal/middleware"
+	"github.com/serge1997/apigateway/internal/middleware/cors"
 
 	"github.com/serge1997/apigateway/internal/proxy"
 )
 
 func ServicesHandler(w http.ResponseWriter, r *http.Request) {
+	corsHandler := cors.New()
+	if corsHandler.Handle(w, r, apigateway.Cors()) {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	serviceName := r.Header.Get("x-service-name")
 	srvce := apigateway.GetService(serviceName)
 	if srvce == nil {

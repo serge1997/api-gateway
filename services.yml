@@ -1,12 +1,12 @@
 server:
   listen_addr: "9091"
   timeout: "6s"
-  cors_allowed_origins: ["*"]
+  cors_allowed_origins: ["http://127.0.0.1:5500"]
   middlewares:
       - cors
       - logger
 circuit_breaker:
-    failure_threshold: 2
+    failure_threshold: 10
     retry_timeout: "30s"
     before:
       - logger
@@ -24,9 +24,7 @@ services:
     rate_limits:
       - type: bucket
         rate: 20
-        burst: 1
+        burst: 5
       - type: window
         limit: 60
-        interval: "1m"
-
-    
+        interval: "60s"

@@ -32,7 +32,9 @@ func (r router) Routes() []contracts.Route {
 func New() router {
 	var rts = make([]contracts.Route, len(routes))
 	for _, route := range routes {
-		rts = append(rts, route)
+		routeOption := route
+		routeOption.method = http.MethodOptions
+		rts = append(rts, route, routeOption)
 	}
 	return router{routes: rts}
 }

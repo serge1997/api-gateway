@@ -6,6 +6,7 @@ import (
 	"time"
 
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
+	"github.com/serge1997/apigateway/internal/contracts"
 	httpresponse "github.com/serge1997/apigateway/shared/httpResponse"
 	"github.com/serge1997/apigateway/shared/result"
 )
@@ -14,18 +15,21 @@ type linearBackoff struct {
 	retryBackoff
 }
 
-func (l *linearBackoff) Execute(op Op, cb *circuitbreaker.CircuitBreaker) result.Result[httpresponse.HttpResponse] {
+func (l *linearBackoff) Execute(op Op, service contracts.Service) result.Result[httpresponse.HttpResponse] {
 	var linearResult result.Result[httpresponse.HttpResponse]
 	for at := 1; at <= int(l.config.Attempt()); at++ {
-		if cb != nil && cb.IsOpen() {
+		if !service.CbIsNil() && service.Cb().IsOpen() {
 			return result.Fail(httpresponse.FailResponse(circuitbreaker.ErrUnacessibleService, http.StatusServiceUnavailable))
+		}
+		if err := service.Allow(); err != nil {
+			return result.Fail(httpresponse.FailResponse(err, http.StatusTooManyRequests))
 		}
 		linearResult = op()
 		if linearResult.IsSuccess() {
-			l.recordCbSuccess(cb)
+			l.recordCbSuccess(service.Cb())
 			return linearResult
 		}
-		l.recordCbFailure(cb)
+		l.recordCbFailure(service.Cb())
 		if at == int(l.config.Attempts) {
 			break
 		}

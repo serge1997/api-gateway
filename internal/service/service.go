@@ -26,6 +26,7 @@ type Service struct {
 	Middlewares    []string                       `yaml:"middlewares" json:"middlewares"`
 	RateLimits     []*ratelimit.Config            `yaml:"rate_limits" json:"rateLimits"`
 	CircuitBreaker *circuitbreaker.CircuitBreaker `yam:"-" json:"cb"`
+	RateLimiters   []ratelimit.RateLimiter        `yaml:"-" json:"rate_limiters"`
 	CbConfig       *circuitbreaker.Config         `yaml:"circuit_breaker" json:"cbConfig"`
 	Timeout        time.Duration                  `yaml:"timeout" json:"timeout"`
 	RetryBackoff   *retry.RetryBackoffConfig      `yaml:"retry" json:"retryBackoff"`
@@ -98,4 +99,21 @@ func (s *Service) RateLimitsIsNil() bool {
 
 func (s *Service) RetryIsNil() bool {
 	return s.RetryBackoff == nil
+}
+
+func (s *Service) Cb() *circuitbreaker.CircuitBreaker {
+	return s.CircuitBreaker
+}
+
+func (s *Service) RtLimiters() []ratelimit.RateLimiter {
+	return s.RateLimiters
+}
+
+func (s *Service) Allow() error {
+	for _, limiter := range s.RateLimiters {
+		if err := limiter.Allow(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
+	"github.com/serge1997/apigateway/internal/contracts"
 	httpresponse "github.com/serge1997/apigateway/shared/httpResponse"
 	"github.com/serge1997/apigateway/shared/result"
 )
@@ -13,7 +13,7 @@ var ErrBackoffAttemptsExceeded error = errors.New("retry backoff attempts exceed
 
 type Op func() result.Result[httpresponse.HttpResponse]
 type RetryBackoffStrategy interface {
-	Execute(f Op, cb *circuitbreaker.CircuitBreaker) result.Result[httpresponse.HttpResponse]
+	Execute(f Op, service contracts.Service) result.Result[httpresponse.HttpResponse]
 	NextInterval() time.Duration
 	Interval() time.Duration
 	Config() *RetryBackoffConfig

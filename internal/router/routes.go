@@ -18,6 +18,11 @@ import (
 
 var routes = []Route{
 	{
+		path:    "/",
+		method:  http.MethodGet,
+		hanlder: api.ServicesHandler,
+	},
+	{
 		path:   "/health",
 		method: http.MethodGet,
 		hanlder: func(w http.ResponseWriter, r *http.Request) {
@@ -125,10 +130,5 @@ var routes = []Route{
 			}, http.StatusOK, "").Json())
 			return
 		},
-	},
-	{
-		path:    "/",
-		method:  http.MethodGet,
-		hanlder: api.ServicesHandler,
 	},
 }
