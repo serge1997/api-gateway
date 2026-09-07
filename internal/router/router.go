@@ -2,13 +2,14 @@ package router
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/serge1997/apigateway/internal/contracts"
 )
 
 type Route struct {
 	path    string
-	method  string
+	methods []string
 	hanlder http.HandlerFunc
 }
 type router struct {
@@ -18,8 +19,8 @@ type router struct {
 func (r Route) Handler() http.HandlerFunc {
 	return r.hanlder
 }
-func (r Route) Method() string {
-	return r.method
+func (r Route) Methods() []string {
+	return r.methods
 }
 
 func (r Route) Path() string {
@@ -32,9 +33,10 @@ func (r router) Routes() []contracts.Route {
 func New() router {
 	var rts = make([]contracts.Route, len(routes))
 	for _, route := range routes {
-		routeOption := route
-		routeOption.method = http.MethodOptions
-		rts = append(rts, route, routeOption)
+		if !slices.Contains(route.Methods(), http.MethodOptions) {
+			route.methods = append(route.methods, http.MethodOptions)
+		}
+		rts = append(rts, route)
 	}
 	return router{routes: rts}
 }

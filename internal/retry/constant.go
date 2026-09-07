@@ -15,7 +15,7 @@ type constantBackoff struct {
 	retryBackoff
 }
 
-func (c *constantBackoff) Execute(op Op, service contracts.Service) result.Result[httpresponse.HttpResponse] {
+func (c *constantBackoff) Execute(op Op, service contracts.ServiceRetry) result.Result[httpresponse.HttpResponse] {
 	var consResult result.Result[httpresponse.HttpResponse]
 	for at := 1; at <= int(c.config.Attempt()); at++ {
 		if !service.CbIsNil() && service.Cb().IsOpen() {

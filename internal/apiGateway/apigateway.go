@@ -85,3 +85,7 @@ func GetService(xName string) *service.Service {
 	}
 	return val
 }
+
+func (a *apiGateway) CORSAllowedOrigins() []string {
+	return a.Server.CORSAllowedOrigins
+}

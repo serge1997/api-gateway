@@ -5,14 +5,7 @@ import (
 	"strings"
 )
 
-type cors struct {
-}
-
-func New() cors {
-	return cors{}
-}
-
-func (c cors) Handle(w http.ResponseWriter, r *http.Request, cors []string) bool {
+func Handler(w http.ResponseWriter, r *http.Request, cors []string) bool {
 	origins := strings.Join(cors, ",")
 	w.Header().Set("Access-Control-Allow-Origin", origins)
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")

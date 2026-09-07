@@ -11,8 +11,7 @@ import (
 )
 
 func ServicesHandler(w http.ResponseWriter, r *http.Request) {
-	corsHandler := cors.New()
-	if corsHandler.Handle(w, r, apigateway.Cors()) {
+	if cors.Handler(w, r, apigateway.Cors()) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}

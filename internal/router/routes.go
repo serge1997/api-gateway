@@ -19,12 +19,12 @@ import (
 var routes = []Route{
 	{
 		path:    "/",
-		method:  http.MethodGet,
+		methods: []string{http.MethodGet, http.MethodDelete, http.MethodPut, http.MethodPatch, http.MethodPost},
 		hanlder: api.ServicesHandler,
 	},
 	{
-		path:   "/health",
-		method: http.MethodGet,
+		path:    "/health",
+		methods: []string{http.MethodGet},
 		hanlder: func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(200)
 			w.Header().Set("Content-Type", "application/json")
@@ -32,22 +32,20 @@ var routes = []Route{
 		},
 	},
 	{
-		path:   "/api/services",
-		method: http.MethodGet,
+		path:    "/api/services",
+		methods: []string{http.MethodGet},
 		hanlder: func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Content-Type", "application/json")
+			shared.AllowOrigin(w)
 			serviceCollection := slices.Collect(maps.Values(service.Services()))
 			response := shared.HttpResponse{Data: serviceCollection, Message: "todos os serviços", Status: 200}.Json()
 			fmt.Fprint(w, response)
 		},
 	},
 	{
-		path:   "/api/summaries",
-		method: http.MethodGet,
+		path:    "/api/summaries",
+		methods: []string{http.MethodGet},
 		hanlder: func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Content-Type", "application/json")
+			shared.AllowOrigin(w)
 			ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
 			defer cancel()
 			repo := reporitory.New(database.Db())
@@ -87,11 +85,10 @@ var routes = []Route{
 		},
 	},
 	{
-		path:   "/api/metrics-of-service",
-		method: http.MethodGet,
+		path:    "/api/metrics-of-service",
+		methods: []string{http.MethodGet},
 		hanlder: func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Content-Type", "application/json")
+			shared.AllowOrigin(w)
 			ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
 			defer cancel()
 			serviceName := r.URL.Query().Get("service")

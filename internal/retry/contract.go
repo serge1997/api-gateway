@@ -13,7 +13,7 @@ var ErrBackoffAttemptsExceeded error = errors.New("retry backoff attempts exceed
 
 type Op func() result.Result[httpresponse.HttpResponse]
 type RetryBackoffStrategy interface {
-	Execute(f Op, service contracts.Service) result.Result[httpresponse.HttpResponse]
+	Execute(f Op, service contracts.ServiceRetry) result.Result[httpresponse.HttpResponse]
 	NextInterval() time.Duration
 	Interval() time.Duration
 	Config() *RetryBackoffConfig

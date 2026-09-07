@@ -33,7 +33,7 @@ func main() {
 
 func doRequest(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-	path := fmt.Sprintf("%s/crackproduct-categories?limit=20&offset=0", gateway)
+	path := fmt.Sprintf("%s/product-categories?limit=20&offset=0", gateway)
 	request, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,

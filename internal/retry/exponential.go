@@ -15,7 +15,7 @@ type exponentialBackoff struct {
 	retryBackoff
 }
 
-func (e *exponentialBackoff) Execute(op Op, service contracts.Service) result.Result[httpresponse.HttpResponse] {
+func (e *exponentialBackoff) Execute(op Op, service contracts.ServiceRetry) result.Result[httpresponse.HttpResponse] {
 	var expResult result.Result[httpresponse.HttpResponse]
 	for at := 1; at <= int(e.config.Attempt()); at++ {
 		if !service.CbIsNil() && service.Cb().IsOpen() {
@@ -28,7 +28,6 @@ func (e *exponentialBackoff) Execute(op Op, service contracts.Service) result.Re
 		// do the ckeck after the first attempts
 		if at > 1 {
 			if err := service.Allow(); err != nil {
-				fmt.Println(err)
 				return result.Fail(httpresponse.FailResponse(err, http.StatusTooManyRequests))
 			}
 		}

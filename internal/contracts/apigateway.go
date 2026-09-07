@@ -9,4 +9,5 @@ type APIGateway interface {
 	ReadTimeout() time.Duration
 	WriteTimeout() time.Duration
 	Timeout() time.Duration
+	CORSAllowedOrigins() []string
 }

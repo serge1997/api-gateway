@@ -27,8 +27,6 @@ type MiddlewareHandler func(ctx contracts.Context, next http.HandlerFunc) (http.
 type MiddlewareHandlerMap map[string]MiddlewareHandler
 type CombinedMiddlewares = map[string]MiddlewareHandlerMap
 
-var middlewares map[string]ServiceHttpHandler = map[string]ServiceHttpHandler{}
-
 type Proxy struct {
 	service     *service.Service
 	Ctx         *Context
@@ -246,7 +244,7 @@ func (p *Proxy) Call(ctx context.Context) {
 }
 
 func Middlewares() map[string]ServiceHttpHandler {
-	return middlewares
+	return map[string]ServiceHttpHandler{}
 }
 
 func (p *Proxy) Method() string {

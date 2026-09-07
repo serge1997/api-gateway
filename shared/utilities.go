@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 )
 
@@ -27,4 +28,9 @@ func ExtractIDFromJWT(token string) (string, error) {
 		return fmt.Sprintf("%.0f", id.(float64)), nil
 	}
 	return "", ErrEmptyJWTId
+}
+
+func AllowOrigin(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
 }

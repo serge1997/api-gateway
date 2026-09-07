@@ -77,9 +77,19 @@ func muxHandlers(s *server) *http.ServeMux {
 	mux := http.NewServeMux()
 	for _, route := range s.router.Routes() {
 		if route != nil {
-			path := fmt.Sprintf("%s %s", route.Method(), route.Path())
-			mux.HandleFunc(path, route.Handler())
+			for _, method := range route.Methods() {
+				path := fmt.Sprintf("%s %s", method, route.Path())
+				mux.HandleFunc(path, route.Handler())
+			}
 		}
 	}
 	return mux
+}
+
+func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	for _, route := range s.router.Routes() {
+		if route != nil {
+
+		}
+	}
 }

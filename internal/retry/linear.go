@@ -15,7 +15,7 @@ type linearBackoff struct {
 	retryBackoff
 }
 
-func (l *linearBackoff) Execute(op Op, service contracts.Service) result.Result[httpresponse.HttpResponse] {
+func (l *linearBackoff) Execute(op Op, service contracts.ServiceRetry) result.Result[httpresponse.HttpResponse] {
 	var linearResult result.Result[httpresponse.HttpResponse]
 	for at := 1; at <= int(l.config.Attempt()); at++ {
 		if !service.CbIsNil() && service.Cb().IsOpen() {
