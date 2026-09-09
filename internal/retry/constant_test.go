@@ -18,7 +18,7 @@ func TestBackoffRetryIsConstant(t *testing.T) {
 	}
 }
 
-func TestReachMaxAttempts(t *testing.T) {
+func TestConstantBackoffRetryReachMaxAttempts(t *testing.T) {
 	var cb, _ = circuitbreaker.New(cbConfig)
 	service := mockService{
 		cb: cb,
@@ -34,7 +34,7 @@ func TestReachMaxAttempts(t *testing.T) {
 	}
 }
 
-func TestMustReturnCbError(t *testing.T) {
+func TestConstantBackoffRetryMustReturnCbError(t *testing.T) {
 	retryBackoff.Config().Backoff = "constant"
 	retryBackoff = retry.New(retryBackoff.Config())
 	var cb, _ = circuitbreaker.New(cbConfig)
@@ -52,7 +52,7 @@ func TestMustReturnCbError(t *testing.T) {
 	}
 }
 
-func TestExecuteMustSuccess(t *testing.T) {
+func TestConstantBackoffRetryExecuteMustSuccess(t *testing.T) {
 	var cb, _ = circuitbreaker.New(cbConfig)
 	service := mockService{
 		cb: cb,
@@ -65,7 +65,7 @@ func TestExecuteMustSuccess(t *testing.T) {
 	}
 }
 
-func TestAttempsIsDefaultValue(t *testing.T) {
+func TestConstantBackoffRetryAttempsIsDefaultValue(t *testing.T) {
 	var cb, _ = circuitbreaker.New(cbConfig)
 	retryBackoff.Config().Attempts = 0
 	service := mockService{

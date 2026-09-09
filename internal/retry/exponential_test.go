@@ -18,7 +18,7 @@ func TestRetryBackoffIsExponential(t *testing.T) {
 		t.Errorf("expect %v got %v", "exponential", retryBackoff.Config().Backoff)
 	}
 }
-func TestExponentialCumulateInterval(t *testing.T) {
+func TestExponentialBackoffRetryCumulateInterval(t *testing.T) {
 	retryBackoff.Config().Backoff = "exponential"
 	retryBackoff = retry.New(retryBackoff.Config())
 	var cb, _ = circuitbreaker.New(cbConfig)
@@ -38,7 +38,7 @@ func TestExponentialCumulateInterval(t *testing.T) {
 	}
 }
 
-func TestExponentialMustReturnCbError(t *testing.T) {
+func TestExponentialBackoffRetryMustReturnCbError(t *testing.T) {
 	var cb, _ = circuitbreaker.New(cbConfig)
 	service := mockService{
 		cb: cb,

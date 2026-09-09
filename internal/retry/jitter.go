@@ -12,6 +12,8 @@ import (
 	"github.com/serge1997/apigateway/shared/result"
 )
 
+var JitterRandMaxMs = 9
+
 type jitterBackoff struct {
 	retryBackoff
 }
@@ -43,7 +45,7 @@ func (j *jitterBackoff) Execute(op Op, service contracts.ServiceRetry) result.Re
 }
 
 func (j *jitterBackoff) NextInterval() time.Duration {
-	randMs := rand.Intn(9) + 1
+	randMs := rand.Intn(JitterRandMaxMs) + 1
 	delay := time.Millisecond * time.Duration(randMs*100)
 	return delay
 }

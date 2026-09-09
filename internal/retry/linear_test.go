@@ -19,7 +19,7 @@ func TestRetryBackOffIsLinear(t *testing.T) {
 		t.Errorf("expect %v got %v", "linear", retryBackoff.Config().Backoff)
 	}
 }
-func TestLinearCumulateInterval(t *testing.T) {
+func TestLinearBackoffRetryCumulateInterval(t *testing.T) {
 	var cb, _ = circuitbreaker.New(cbConfig)
 	service := mockService{
 		cb: cb,
@@ -35,7 +35,7 @@ func TestLinearCumulateInterval(t *testing.T) {
 	}
 }
 
-func TestLinarMustReturnCbError(t *testing.T) {
+func TestLinarBackoffRetryMustReturnCbError(t *testing.T) {
 	var cb, _ = circuitbreaker.New(cbConfig)
 	service := mockService{
 		cb: cb,
@@ -56,7 +56,7 @@ func TestLinarMustReturnCbError(t *testing.T) {
 	}
 }
 
-func TestLinearMaxAttemdReached(t *testing.T) {
+func TestLinearBackoffRetryMaxAttemdReached(t *testing.T) {
 	var cb, _ = circuitbreaker.New(cbConfig)
 	service := mockService{
 		cb: cb,

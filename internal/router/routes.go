@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/serge1997/apigateway/internal/api"
+	apigateway "github.com/serge1997/apigateway/internal/apiGateway"
 	"github.com/serge1997/apigateway/internal/database"
 	"github.com/serge1997/apigateway/internal/reporitory"
-	"github.com/serge1997/apigateway/internal/service"
 	"github.com/serge1997/apigateway/shared"
 	httpresponse "github.com/serge1997/apigateway/shared/httpResponse"
 )
@@ -36,7 +36,7 @@ var routes = []Route{
 		methods: []string{http.MethodGet},
 		hanlder: func(w http.ResponseWriter, r *http.Request) {
 			shared.AllowOrigin(w)
-			serviceCollection := slices.Collect(maps.Values(service.Services()))
+			serviceCollection := slices.Collect(maps.Values(apigateway.Services()))
 			response := shared.HttpResponse{Data: serviceCollection, Message: "todos os serviços", Status: 200}.Json()
 			fmt.Fprint(w, response)
 		},
