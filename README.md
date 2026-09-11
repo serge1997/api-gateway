@@ -146,9 +146,9 @@ func main() {
 		server.WithRouter(router.New()),
 	)
 	defer srv.Close()
-  
+
 	gtw.UseGlobal("logger", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
-		log.Printf("%s - %s", ctx.Method(), ctx.Path())
+	  log.Printf("%s - %s", ctx.Method(), ctx.Path())
 		return next, nil
 	})
 
