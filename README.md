@@ -71,11 +71,13 @@ server:
   listen_addr: "9091"
   timeout: "6s"
   cors_allowed_origins: ["http://127.0.0.1:5500"]
+
 services:
   users:
     name: users
     target: http://localhost:8000/api
     timeout: "10s" # service http call timeout
+
     # Middlewares applied after the circuit breaker check.
     # Must be registered via proxy.Use() before the gateway starts.
     middlewares:
@@ -98,7 +100,7 @@ services:
       retry_timeout: "10s"       # how long to wait before trying again (Half-Open)
       before:
         - logger                 # runs before the circuit breaker check
-                                 # must also be declared in middlewares above
+                                  # must also be declared in middlewares above
 
   orders:
     name: orders
@@ -148,16 +150,17 @@ func main() {
 	defer srv.Close()
 
 	gtw.UseGlobal("logger", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
-	  log.Printf("%s - %s", ctx.Method(), ctx.Path())
+		log.Printf("%s - %s", ctx.Method(), ctx.Path())
 		return next, nil
 	})
 
-  gtw.Use("auth", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error)  {
+	gtw.Use("auth", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
 		if ctx.Header("Authorization") != "Bearer my-secret-token" {
 			return nil, ctx.Unauthorized()
 		}
 		return next, nil
 	})
+
 	log.Fatal(srv.Listen())
 }
 ```
@@ -214,54 +217,55 @@ circuit_breaker:
 
 The `before` list controls which middlewares execute before the circuit breaker check. This is useful for logging and metrics — you may want to record rejected requests even when the circuit is open.
 
+---
 
 ## Retry with Backoff
- 
+
 When a downstream service fails, the gateway can retry the request automatically using a configurable backoff strategy. Each retry checks the circuit breaker state before attempting — if the circuit opened during retries, the gateway aborts immediately instead of continuing to hammer an unhealthy service.
- 
+
 ### Strategies
- 
+
 | Strategy | Behavior |
 |---|---|
 | **constant** | Fixed delay between every attempt |
 | **linear** | Delay grows linearly with each attempt |
 | **exponential** | Delay doubles with each attempt |
 | **jitter** | Random delay up to a configured maximum — spreads retries across time to avoid thundering herd |
- 
+
 ### Configuration
- 
+
 ```yaml
 services:
   orders:
     target: http://localhost:9000/api
- 
+
     retry:
       strategy: exponential
       attempts: 3         # default: 1
       max_delay: "1s"     # applies to jitter and exponential
 ```
- 
+
 ### How it integrates with the Circuit Breaker
- 
+
 At the start of each attempt, the gateway checks whether the circuit breaker is open. If it is, the retry loop exits immediately and returns `503 Service Unavailable` — no further calls are made to the downstream service.
- 
+
 ```
 attempt 1 → cb open? no  → call service → failure → RecordFailure()
 attempt 2 → cb open? no  → call service → failure → RecordFailure() → cb opens
 attempt 3 → cb open? yes → abort immediately → 503
 ```
- 
+
 Every success calls `RecordSuccess()` and every failure calls `RecordFailure()` on the circuit breaker, so the two mechanisms stay in sync without any manual coordination.
- 
+
 ### Backoff intervals
- 
+
 ```
 constant:     100ms ─── 100ms ─── 100ms
 linear:       100ms ─── 200ms ─── 300ms
 exponential:  100ms ─── 200ms ─── 400ms
 jitter:       ~300ms ── ~750ms ── ~100ms  (random, up to max_delay)
 ```
- 
+
 Jitter is recommended for high-traffic services — when many clients retry at the same interval they hit the recovering service simultaneously. Randomizing the delay spreads the load.
 
 ---
