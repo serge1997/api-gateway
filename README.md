@@ -67,7 +67,10 @@ Incoming Request
 
 ```yaml
 # services.yml
-
+server:
+  listen_addr: "9091"
+  timeout: "6s"
+  cors_allowed_origins: ["http://127.0.0.1:5500"]
 services:
   users:
     name: users
@@ -127,42 +130,34 @@ Middlewares are registered once at startup and referenced by name in the YAML:
 package main
 
 import (
-    "log"
-    "net/http"
+	"log"
+	"net/http"
 
-    "github.com/you/api-gateway/internal/proxy"
+	apigateway "github.com/serge1997/apigateway/internal/apiGateway"
+	"github.com/serge1997/apigateway/internal/contracts"
+	"github.com/serge1997/apigateway/internal/router"
+	"github.com/serge1997/apigateway/internal/server"
 )
 
 func main() {
-    // Register a logging middleware
-    proxy.Use("logger", func(next http.HandlerFunc) http.HandlerFunc {
-        return func(w http.ResponseWriter, r *http.Request) {
-            log.Printf("%s %s", r.Method, r.URL.Path)
-            next(w, r)
-        }
-    })
+	  gtw := apigateway.New()
+	  srv := server.New(
+		  server.WithApiGateway(gtw),
+		  server.WithRouter(router.New()),
+	  )
+	  defer srv.Close()
+	  gtw.UseGlobal("logger", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+		  log.Printf("%s - %s", ctx.Method(), ctx.Path())
+		  return next, nil
+	  })
 
-    // Register a JWT auth middleware
-    proxy.Use("auth_jwt", func(next http.HandlerFunc) http.HandlerFunc {
-        return func(w http.ResponseWriter, r *http.Request) {
-            token := r.Header.Get("Authorization")
-            if token == "" {
-                http.Error(w, "unauthorized", http.StatusUnauthorized)
-                return
-            }
-            next(w, r)
-        }
-    })
-
-    // Register a CORS middleware
-    proxy.Use("cors", func(next http.HandlerFunc) http.HandlerFunc {
-        return func(w http.ResponseWriter, r *http.Request) {
-            w.Header().Set("Access-Control-Allow-Origin", "*")
-            next(w, r)
-        }
-    })
-
-    http.ListenAndServe(":8080", proxy.Router())
+    gtw.Use("auth", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error)  {
+		  if ctx.Header("Authorization") != "Bearer my-secret-token" {
+			  return nil, ctx.Unauthorized()
+		  }
+		  return next, nil
+	  })
+	  log.Fatal(srv.Listen())
 }
 ```
 

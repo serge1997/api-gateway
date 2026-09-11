@@ -18,46 +18,58 @@ type server struct {
 	router       contracts.Router
 }
 
-func New(cfg contracts.APIGateway, router contracts.Router) *server {
-	s := &server{cfg: cfg, router: router}
-	s.setListenAddr().
-		setReadTimeout().
-		setWriteTimeout()
-
-	s.srv = newHttpServer(s)
+func New(opts ...Option) *server {
+	s := &server{}
+	for _, opt := range opts {
+		opt(s)
+	}
+	s.applyConfigValues()
 	return s
 }
 
-func (s *server) setListenAddr() *server {
+func (s *server) setListenAddr() {
 	if s.cfg.ListenAddr() == "" {
 		s.listenAddr = defaultAddr
-		return s
+		return
 	}
 	s.listenAddr = s.cfg.ListenAddr()
-	return s
 }
 
-func (s *server) setReadTimeout() *server {
+func (s *server) setReadTimeout() {
 	if s.cfg.ReadTimeout().String() == "0s" {
 		s.readTimeout = defaultReadWriteTimeout
-		return s
+		return
 	}
 	s.readTimeout = s.cfg.ReadTimeout()
-	return s
 }
 
-func (s *server) setWriteTimeout() *server {
+func (s *server) setWriteTimeout() {
 	if s.cfg.ReadTimeout().String() == "0s" {
 		s.writeTimeout = defaultReadWriteTimeout
-		return s
+		return
 	}
 	s.readTimeout = s.cfg.WriteTimeout()
+}
+
+func (s *server) setHttpServer() *server {
+	s.srv = newHttpServer(s)
 	return s
 }
 
 func (s *server) Listen() error {
 	initLog(s)
 	return s.srv.ListenAndServe()
+}
+
+func (s *server) applyConfigValues() {
+	s.setListenAddr()
+	s.setReadTimeout()
+	s.setWriteTimeout()
+	s.setHttpServer()
+}
+
+func (s *server) Close() error {
+	return s.srv.Close()
 }
 
 func newHttpServer(s *server) *http.Server {
@@ -84,12 +96,4 @@ func muxHandlers(s *server) *http.ServeMux {
 		}
 	}
 	return mux
-}
-
-func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	for _, route := range s.router.Routes() {
-		if route != nil {
-
-		}
-	}
 }
