@@ -75,28 +75,24 @@ server:
     - logger
     - cors
   circuit_breaker:
-    failure_threshold: 5       # consecutive failures before opening the circuit
-    retry_timeout: "10s"       # how long to wait before trying again (Half-Open)
+    failure_threshold: 5  
+    retry_timeout: "10s" 
     before:
       - logger 
-
 services:
   users:
     name: users
     target: http://localhost:8000/api
     timeout: "10s"
-
     middlewares:
       - auth_jwt
-
-    # Supports multiple strategies applied in sequence.
     rate_limits:
       - type: bucket  
         rate: 20
         burst: 5  
       - type: window 
         limit: 60
-        interval: "1m"     # window duration (e.g. "30s", "1m", "1h")
+        interval: "1m" 
 
   orders:
     name: orders
