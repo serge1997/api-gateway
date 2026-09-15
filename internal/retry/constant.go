@@ -21,8 +21,10 @@ func (c *constantBackoff) Execute(op Op, service contracts.ServiceRetry) result.
 		if !service.CbIsNil() && service.Cb().IsOpen() {
 			return result.Fail(httpresponse.FailResponse(circuitbreaker.ErrUnacessibleService, http.StatusServiceUnavailable))
 		}
-		if err := service.Allow(); err != nil {
-			return result.Fail(httpresponse.FailResponse(err, http.StatusTooManyRequests))
+		if at > 1 {
+			if err := service.Allow(); err != nil {
+				return result.Fail(httpresponse.FailResponse(err, http.StatusTooManyRequests))
+			}
 		}
 		consResult = op()
 		if consResult.IsSuccess() {

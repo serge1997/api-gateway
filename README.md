@@ -6,7 +6,7 @@ A production-ready API Gateway written in Go, featuring per-service rate limitin
 
 ## Features
 
-- **Circuit Breaker** — per-service, with Closed / Open / Half-Open state machine and configurable failure threshold and retry timeout
+- **Circuit Breaker** — per-service or register once for all services, with Closed / Open / Half-Open state machine and configurable failure threshold and retry timeout
 - **Rate Limiting** — two strategies per service: Token Bucket and Sliding Window
 - **Middleware Pipeline** — register middleware globally, apply per-service; control which middlewares run before the circuit breaker check
 - **YAML Configuration** — all behavior is declared in `services.yml`, no code changes required to add or modify services
@@ -71,55 +71,42 @@ server:
   listen_addr: "9091"
   timeout: "6s"
   cors_allowed_origins: ["http://127.0.0.1:5500"]
+  middlewares:
+    - logger
+    - cors
+  circuit_breaker:
+    failure_threshold: 5       # consecutive failures before opening the circuit
+    retry_timeout: "10s"       # how long to wait before trying again (Half-Open)
+    before:
+      - logger 
 
 services:
   users:
     name: users
     target: http://localhost:8000/api
-    timeout: "10s" # service http call timeout
+    timeout: "10s"
 
-    # Middlewares applied after the circuit breaker check.
-    # Must be registered via proxy.Use() before the gateway starts.
     middlewares:
       - auth_jwt
-      - cors
-      - logger
 
     # Supports multiple strategies applied in sequence.
     rate_limits:
-      - type: bucket       # Token Bucket — smooth request flow
-        rate: 20           # tokens added per second
-        burst: 5           # max burst size
-
-      - type: window       # Sliding Window — hard limit per interval
-        limit: 60          # max requests allowed
+      - type: bucket  
+        rate: 20
+        burst: 5  
+      - type: window 
+        limit: 60
         interval: "1m"     # window duration (e.g. "30s", "1m", "1h")
-
-    circuit_breaker:
-      failure_threshold: 5       # consecutive failures before opening the circuit
-      retry_timeout: "10s"       # how long to wait before trying again (Half-Open)
-      before:
-        - logger                 # runs before the circuit breaker check
-                                  # must also be declared in middlewares above
 
   orders:
     name: orders
     target: http://localhost:9000/api
-
     middlewares:
-      - logger
       - auth_jwt
-
     rate_limits:
       - type: bucket
         rate: 50
         burst: 10
-
-    circuit_breaker:
-      failure_threshold: 3
-      retry_timeout: "30s"
-      before:
-        - logger
 ```
 
 ---
@@ -238,7 +225,6 @@ When a downstream service fails, the gateway can retry the request automatically
 services:
   orders:
     target: http://localhost:9000/api
-
     retry:
       strategy: exponential
       attempts: 3         # default: 1
@@ -280,12 +266,18 @@ api-gateway/
 ├── internal/
 │   ├── proxy/
 │   │   └── proxy.go       # reverse proxy, pipeline assembly, middleware registry
+|   ├── retry/
+│   │   ├── constant.go
+│   │   ├── exponential.go
+│   │   └── jitter.go
+│   │   └── linear.go
+│   │   └── retry.go
 │   ├── ratelimit/
 │   │   ├── bucket.go      # token bucket strategy
 │   │   ├── window.go      # sliding window strategy
 │   │   └── config.go
 │   ├── circuitbreaker/
-│   │   ├── breaker.go     # state machine: Closed, Open, HalfOpen
+│   │   ├── circuitbreaker.go     # state machine: Closed, Open, HalfOpen
 │   │   └── config.go
 └── go.mod
 └── services.yml
