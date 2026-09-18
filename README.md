@@ -261,7 +261,7 @@ api-gateway/
 │       └── main.go
 ├── internal/
 │   ├── proxy/
-│   │   └── proxy.go       # reverse proxy, pipeline assembly, middleware registry
+│   │   └── proxy.go 
 |   ├── retry/
 │   │   ├── constant.go
 │   │   ├── exponential.go
@@ -269,11 +269,11 @@ api-gateway/
 │   │   └── linear.go
 │   │   └── retry.go
 │   ├── ratelimit/
-│   │   ├── bucket.go      # token bucket strategy
-│   │   ├── window.go      # sliding window strategy
+│   │   ├── bucket.go   
+│   │   ├── window.go 
 │   │   └── config.go
 │   ├── circuitbreaker/
-│   │   ├── circuitbreaker.go     # state machine: Closed, Open, HalfOpen
+│   │   ├── circuitbreaker.go
 │   │   └── config.go
 └── go.mod
 └── services.yml
