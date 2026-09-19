@@ -1,0 +1,45 @@
+package proxy
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+
+	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
+	"github.com/serge1997/apigateway/internal/contracts"
+	"github.com/serge1997/apigateway/internal/service"
+)
+
+var combinedMdlwsMock CombinedMiddlewares = CombinedMiddlewares{
+	"global": MiddlewareHandlerMap{
+		"logger": func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+			fmt.Println("global middleware running")
+			return next, nil
+		},
+	},
+	"service": MiddlewareHandlerMap{
+		"auth": func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+			if ctx.Header("Authorization") == "" {
+				return nil, ctx.Unauthorized()
+			}
+			return next, nil
+		},
+	},
+}
+
+var reqMock = func(method string, url string) *http.Request {
+	return httptest.NewRequest(method, url, nil)
+}
+
+var writerMock = httptest.NewRecorder()
+var serviceMock = service.Service{
+	Name:        "posts",
+	Target:      "http://localhost",
+	Middlewares: []string{"auth", "logger"},
+	CbConfig: &circuitbreaker.Config{
+		FailureThreshold: 5,
+		RetryTimeout:     "500ms",
+		Before:           []string{"logger"},
+	},
+}
+var proxyMock = New(&serviceMock, combinedMdlwsMock, writerMock, reqMock(http.MethodGet, serviceMock.Target))

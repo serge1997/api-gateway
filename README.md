@@ -6,7 +6,7 @@ A production-ready API Gateway written in Go, featuring per-service rate limitin
 
 ## Features
 
-- **Circuit Breaker** — per-service, with Closed / Open / Half-Open state machine and configurable failure threshold and retry timeout
+- **Circuit Breaker** — per-service or register once for all services, with Closed / Open / Half-Open state machine and configurable failure threshold and retry timeout
 - **Rate Limiting** — two strategies per service: Token Bucket and Sliding Window
 - **Middleware Pipeline** — register middleware globally, apply per-service; control which middlewares run before the circuit breaker check
 - **YAML Configuration** — all behavior is declared in `services.yml`, no code changes required to add or modify services
@@ -67,54 +67,42 @@ Incoming Request
 
 ```yaml
 # services.yml
-
+server:
+  listen_addr: "9091"
+  timeout: "6s"
+  cors_allowed_origins: ["http://127.0.0.1:5500"]
+  middlewares:
+    - logger
+    - cors
+  circuit_breaker:
+    failure_threshold: 5  
+    retry_timeout: "10s" 
+    before:
+      - logger 
 services:
   users:
     name: users
     target: http://localhost:8000/api
-    timeout: "10s" # service http call timeout
-    # Middlewares applied after the circuit breaker check.
-    # Must be registered via proxy.Use() before the gateway starts.
+    timeout: "10s"
     middlewares:
       - auth_jwt
-      - cors
-      - logger
-
-    # Supports multiple strategies applied in sequence.
     rate_limits:
-      - type: bucket       # Token Bucket — smooth request flow
-        rate: 20           # tokens added per second
-        burst: 5           # max burst size
-
-      - type: window       # Sliding Window — hard limit per interval
-        limit: 60          # max requests allowed
-        interval: "1m"     # window duration (e.g. "30s", "1m", "1h")
-
-    circuit_breaker:
-      failure_threshold: 5       # consecutive failures before opening the circuit
-      retry_timeout: "10s"       # how long to wait before trying again (Half-Open)
-      before:
-        - logger                 # runs before the circuit breaker check
-                                 # must also be declared in middlewares above
+      - type: bucket  
+        rate: 20
+        burst: 5  
+      - type: window 
+        limit: 60
+        interval: "1m" 
 
   orders:
     name: orders
     target: http://localhost:9000/api
-
     middlewares:
-      - logger
       - auth_jwt
-
     rate_limits:
       - type: bucket
         rate: 50
         burst: 10
-
-    circuit_breaker:
-      failure_threshold: 3
-      retry_timeout: "30s"
-      before:
-        - logger
 ```
 
 ---
@@ -127,42 +115,36 @@ Middlewares are registered once at startup and referenced by name in the YAML:
 package main
 
 import (
-    "log"
-    "net/http"
+	"log"
+	"net/http"
 
-    "github.com/you/api-gateway/internal/proxy"
+	apigateway "github.com/serge1997/apigateway/internal/apiGateway"
+	"github.com/serge1997/apigateway/internal/contracts"
+	"github.com/serge1997/apigateway/internal/router"
+	"github.com/serge1997/apigateway/internal/server"
 )
 
 func main() {
-    // Register a logging middleware
-    proxy.Use("logger", func(next http.HandlerFunc) http.HandlerFunc {
-        return func(w http.ResponseWriter, r *http.Request) {
-            log.Printf("%s %s", r.Method, r.URL.Path)
-            next(w, r)
-        }
-    })
+	gtw := apigateway.New()
+	srv := server.New(
+		server.WithApiGateway(gtw),
+		server.WithRouter(router.New()),
+	)
+	defer srv.Close()
 
-    // Register a JWT auth middleware
-    proxy.Use("auth_jwt", func(next http.HandlerFunc) http.HandlerFunc {
-        return func(w http.ResponseWriter, r *http.Request) {
-            token := r.Header.Get("Authorization")
-            if token == "" {
-                http.Error(w, "unauthorized", http.StatusUnauthorized)
-                return
-            }
-            next(w, r)
-        }
-    })
+	gtw.UseGlobal("logger", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+		log.Printf("%s - %s", ctx.Method(), ctx.Path())
+		return next, nil
+	})
 
-    // Register a CORS middleware
-    proxy.Use("cors", func(next http.HandlerFunc) http.HandlerFunc {
-        return func(w http.ResponseWriter, r *http.Request) {
-            w.Header().Set("Access-Control-Allow-Origin", "*")
-            next(w, r)
-        }
-    })
+	gtw.Use("auth", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+		if ctx.Header("Authorization") != "Bearer my-secret-token" {
+			return nil, ctx.Unauthorized()
+		}
+		return next, nil
+	})
 
-    http.ListenAndServe(":8080", proxy.Router())
+	log.Fatal(srv.Listen())
 }
 ```
 
@@ -220,6 +202,56 @@ The `before` list controls which middlewares execute before the circuit breaker 
 
 ---
 
+## Retry with Backoff
+
+When a downstream service fails, the gateway can retry the request automatically using a configurable backoff strategy. Each retry checks the circuit breaker state before attempting — if the circuit opened during retries, the gateway aborts immediately instead of continuing to hammer an unhealthy service.
+
+### Strategies
+
+| Strategy | Behavior |
+|---|---|
+| **constant** | Fixed delay between every attempt |
+| **linear** | Delay grows linearly with each attempt |
+| **exponential** | Delay doubles with each attempt |
+| **jitter** | Random delay up to a configured maximum — spreads retries across time to avoid thundering herd |
+
+### Configuration
+
+```yaml
+services:
+  orders:
+    target: http://localhost:9000/api
+    retry:
+      strategy: exponential
+      attempts: 3         # default: 1
+      max_delay: "1s"     # applies to jitter and exponential
+```
+
+### How it integrates with the Circuit Breaker
+
+At the start of each attempt, the gateway checks whether the circuit breaker is open. If it is, the retry loop exits immediately and returns `503 Service Unavailable` — no further calls are made to the downstream service.
+
+```
+attempt 1 → cb open? no  → call service → failure → RecordFailure()
+attempt 2 → cb open? no  → call service → failure → RecordFailure() → cb opens
+attempt 3 → cb open? yes → abort immediately → 503
+```
+
+Every success calls `RecordSuccess()` and every failure calls `RecordFailure()` on the circuit breaker, so the two mechanisms stay in sync without any manual coordination.
+
+### Backoff intervals
+
+```
+constant:     100ms ─── 100ms ─── 100ms
+linear:       100ms ─── 200ms ─── 300ms
+exponential:  100ms ─── 200ms ─── 400ms
+jitter:       ~300ms ── ~750ms ── ~100ms  (random, up to max_delay)
+```
+
+Jitter is recommended for high-traffic services — when many clients retry at the same interval they hit the recovering service simultaneously. Randomizing the delay spreads the load.
+
+---
+
 ## Project Structure
 
 ```
@@ -229,13 +261,19 @@ api-gateway/
 │       └── main.go
 ├── internal/
 │   ├── proxy/
-│   │   └── proxy.go       # reverse proxy, pipeline assembly, middleware registry
+│   │   └── proxy.go 
+|   ├── retry/
+│   │   ├── constant.go
+│   │   ├── exponential.go
+│   │   └── jitter.go
+│   │   └── linear.go
+│   │   └── retry.go
 │   ├── ratelimit/
-│   │   ├── bucket.go      # token bucket strategy
-│   │   ├── window.go      # sliding window strategy
+│   │   ├── bucket.go   
+│   │   ├── window.go 
 │   │   └── config.go
 │   ├── circuitbreaker/
-│   │   ├── breaker.go     # state machine: Closed, Open, HalfOpen
+│   │   ├── circuitbreaker.go
 │   │   └── config.go
 └── go.mod
 └── services.yml

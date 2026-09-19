@@ -1,4 +1,4 @@
-package shared
+package httpresponse
 
 import "encoding/json"
 
@@ -28,6 +28,17 @@ func (h HttpResponse) Json() string {
 		"message": h.Message,
 		"status":  h.Status,
 		"success": h.Success,
+	}
+	responseb, _ := json.Marshal(response)
+	return string(responseb)
+}
+
+func ToJSON(message string, status int, success bool, data interface{}) string {
+	response := map[string]interface{}{
+		"data":    data,
+		"message": message,
+		"status":  status,
+		"success": success,
 	}
 	responseb, _ := json.Marshal(response)
 	return string(responseb)

@@ -4,32 +4,28 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/serge1997/apigateway/internal/proxy"
+	apigateway "github.com/serge1997/apigateway/internal/apiGateway"
+	"github.com/serge1997/apigateway/internal/contracts"
+	"github.com/serge1997/apigateway/internal/router"
+	"github.com/serge1997/apigateway/internal/server"
 )
 
 func main() {
-	proxy.Use("logger", func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			log.Printf("%s - %s", r.Method, r.URL.Path)
-			next(w, r)
-		}
+	gtw := apigateway.New()
+	srv := server.New(
+		server.WithApiGateway(gtw),
+		server.WithRouter(router.New()),
+	)
+	defer srv.Close()
+	gtw.UseGlobal("logger", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+		log.Printf("[logger] %s - %s", ctx.Method(), ctx.Path())
+		return next, nil
 	})
-	proxy.Use("auth_jwt", func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			token := r.Header.Get("Authorization")
-			if token == "" {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			next(w, r)
+	gtw.Use("auth", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+		if ctx.Header("Authorization") != "Bearer my-secret-token" {
+			return nil, ctx.Unauthorized()
 		}
+		return next, nil
 	})
-	proxy.Use("cors", func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			next(w, r)
-		}
-	})
-	log.Fatal(http.ListenAndServe(":9091", proxy.Router()))
+	log.Fatal(srv.Listen())
 }
