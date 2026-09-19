@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -66,22 +65,28 @@ func (p *Proxy) setDefaultHeaders(client *http.Request) {
 
 func (p *Proxy) splitMiddlewares() (before, after []MiddlewareHandler) {
 	serviceMiddlewares := p.middlewares["service"]
-	globalMdlwsName := slices.Collect(maps.Keys(p.middlewares["global"]))
-	globalMdlwsHandler := slices.Collect(maps.Values(p.middlewares["global"]))
-	after = append(after, globalMdlwsHandler...)
+	globalMiddlewares := p.middlewares["global"]
 	for _, name := range p.service.Middlewares {
 		handler, ok := serviceMiddlewares[name]
 		if !ok {
 			continue
 		}
-		if slices.Contains(globalMdlwsName, name) {
+		if !p.service.CbIsNil() && slices.Contains(p.service.CbConfig.Before, name) {
+			before = append(before, handler)
 			continue
 		}
-		if slices.Contains(p.service.CbConfig.Before, name) {
-			before = append(before, handler)
-		} else {
-			after = append(after, handler)
+		after = append(after, handler)
+	}
+	for _, name := range p.service.Middlewares {
+		handler, ok := globalMiddlewares[name]
+		if !ok {
+			continue
 		}
+		if !p.service.CbIsNil() && slices.Contains(p.service.CbConfig.Before, name) {
+			before = append(before, handler)
+			continue
+		}
+		after = append(after, handler)
 	}
 	return
 }
@@ -91,7 +96,7 @@ func (p *Proxy) buildMiddlewaresChain(handler http.HandlerFunc, afterMiddlewares
 		handler_, err := middleware(p.Ctx, finalHandler)
 		if err != nil {
 			statusCode := p.Ctx.GetStatusString(err.Error())
-			http.Error(p.Ctx.Writer(), p.Ctx.Err(err, statusCode).Error(), 501)
+			http.Error(p.Ctx.Writer(), err.Error(), 501)
 			mdlwsStream := stream.NewRequestStream(p, result.Fail(httpresponse.FailResponse(
 				err,
 				statusCode,

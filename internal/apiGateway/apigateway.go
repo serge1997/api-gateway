@@ -1,6 +1,8 @@
 package apigateway
 
 import (
+	"fmt"
+	"slices"
 	"time"
 
 	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
@@ -19,6 +21,7 @@ type apiGateway struct {
 	CircuitBreaker       *circuitbreaker.CircuitBreaker `yaml:"-"`
 	CircuitbreakerConfig *circuitbreaker.Config         `yaml:"circuit_breaker" json:"circuit_breaker"`
 	RateLimits           []*ratelimit.Config            `yaml:"rate_limits" json:"rate_limits"`
+	Middlewares          []string
 }
 
 func New() *apiGateway {
@@ -27,7 +30,9 @@ func New() *apiGateway {
 		panic(err)
 	}
 	cORSAllowedOrigins = gtw.Server.CORSAllowedOrigins
-	gtw.applyGlobalDefaults()
+	if err := gtw.applyGlobalDefaults(); err != nil {
+		panic(err)
+	}
 	services = gtw.Services
 	return gtw
 }
@@ -64,7 +69,7 @@ func (a *apiGateway) Timeout() time.Duration {
 	return a.Server.Timeout
 }
 
-func (a *apiGateway) applyGlobalDefaults() {
+func (a *apiGateway) applyGlobalDefaults() error {
 	for _, service := range a.Services {
 		if a.CircuitbreakerConfig != nil && service.CbIsNil() {
 			service.CbConfig = a.CircuitbreakerConfig
@@ -75,7 +80,26 @@ func (a *apiGateway) applyGlobalDefaults() {
 		if a.Retry != nil && service.RetryIsNil() {
 			service.RetryBackoff = a.Retry
 		}
+
+		if len(service.Middlewares) == 0 {
+			service.Middlewares = a.Middlewares
+		} else {
+			for _, name := range a.Middlewares {
+				if !slices.Contains(service.Middlewares, name) {
+					service.Middlewares = append(service.Middlewares, name)
+				}
+			}
+		}
+
+		if !service.CbIsNil() && len(service.CbConfig.Before) >= 1 {
+			for _, before := range service.CbConfig.Before {
+				if !slices.Contains(service.Middlewares, before) {
+					return fmt.Errorf("You need to register a before [%s] middleware in middleware group", before)
+				}
+			}
+		}
 	}
+	return nil
 }
 
 func GetService(xName string) *service.Service {

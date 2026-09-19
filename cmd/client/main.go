@@ -20,7 +20,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	wg.Add(20)
-	for range 20 {
+	for range 1 {
 		delay := time.Duration(rand.Intn(9)+1*1000) * time.Millisecond
 		time.Sleep(delay)
 		go func() {
@@ -45,6 +45,7 @@ func doRequest(ctx context.Context, wg *sync.WaitGroup) {
 	}
 	request.Header.Set("x-service-name", "users")
 	request.Header.Set("Content-Type", "application/json")
+	token = "my-secret-token"
 	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {

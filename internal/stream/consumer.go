@@ -34,7 +34,6 @@ func consumer() {
 			select {
 			case toPerisistStream := <-dataStream:
 				batchedStream = append(batchedStream, toPerisistStream)
-				fmt.Printf("%+v\n", batchedStream[0])
 				if len(batchedStream) >= batchSize {
 					persistFn()
 				}

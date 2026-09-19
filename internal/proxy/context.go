@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"runtime/debug"
 
 	httpresponse "github.com/serge1997/apigateway/shared/httpResponse"
 )
@@ -37,7 +36,8 @@ func (c *Context) Unauthorized() error {
 		"Unauthorized",
 		http.StatusUnauthorized,
 		false,
-		string(debug.Stack()),
+		"",
+		//string(debug.Stack()),
 	))
 }
 func (c *Context) Err(err error, status int) error {
@@ -45,7 +45,8 @@ func (c *Context) Err(err error, status int) error {
 		err.Error(),
 		status,
 		false,
-		string(debug.Stack()),
+		"",
+		//string(debug.Stack()),
 	))
 }
 

@@ -2,9 +2,8 @@ server:
   listen_addr: "9091"
   timeout: "6s"
   cors_allowed_origins: ["http://127.0.0.1:5500"]
-  middlewares:
-      - cors
-      - logger
+middlewares:
+    - logger
 circuit_breaker:
     failure_threshold: 10
     retry_timeout: "30s"
@@ -20,7 +19,7 @@ services:
     timeout: "10s"
     target: http://localhost:8000/api
     middlewares:
-      - auth_jwt
+      - auth
     rate_limits:
       - type: bucket
         rate: 20

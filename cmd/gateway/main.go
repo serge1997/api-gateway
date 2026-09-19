@@ -18,7 +18,7 @@ func main() {
 	)
 	defer srv.Close()
 	gtw.UseGlobal("logger", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
-		log.Printf("%s - %s", ctx.Method(), ctx.Path())
+		log.Printf("[logger] %s - %s", ctx.Method(), ctx.Path())
 		return next, nil
 	})
 	gtw.Use("auth", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
