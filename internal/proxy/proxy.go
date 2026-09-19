@@ -15,7 +15,6 @@ import (
 	ratelimit "github.com/serge1997/apigateway/internal/rateLimit"
 	"github.com/serge1997/apigateway/internal/retry"
 	"github.com/serge1997/apigateway/internal/service"
-	"github.com/serge1997/apigateway/internal/stream"
 	"github.com/serge1997/apigateway/shared"
 	httpresponse "github.com/serge1997/apigateway/shared/httpResponse"
 	"github.com/serge1997/apigateway/shared/result"
@@ -95,13 +94,7 @@ func (p *Proxy) buildMiddlewaresChain(handler http.HandlerFunc, afterMiddlewares
 	for _, middleware := range afterMiddlewares {
 		handler_, err := middleware(p.Ctx, finalHandler)
 		if err != nil {
-			statusCode := p.Ctx.GetStatusString(err.Error())
 			http.Error(p.Ctx.Writer(), err.Error(), 501)
-			mdlwsStream := stream.NewRequestStream(p, result.Fail(httpresponse.FailResponse(
-				err,
-				statusCode,
-			)))
-			stream.Produce(mdlwsStream)
 			return nil
 		}
 		finalHandler = handler_
@@ -128,11 +121,6 @@ func (p *Proxy) applyRateLimitChain(handler http.HandlerFunc) http.HandlerFunc {
 		}
 		if err := p.service.Allow(); err != nil {
 			http.Error(w, err.Error(), http.StatusTooManyRequests)
-			reqStream := stream.NewRequestStream(p, result.Fail(httpresponse.FailResponse(
-				err,
-				http.StatusTooManyRequests,
-			)))
-			stream.Produce(reqStream)
 			return
 		}
 		handler(w, r)
@@ -165,11 +153,6 @@ func (p *Proxy) withCircuitBreaker(handler http.HandlerFunc, befores []Middlewar
 		if err := p.service.CircuitBreaker.Handle(); err != nil {
 			http.Error(w, p.Ctx.Err(err, http.StatusBadGateway).Error(), http.StatusBadGateway)
 			p.service.CircuitBreaker.RecordFailure()
-			reqStream := stream.NewRequestStream(p, result.Fail(httpresponse.FailResponse(
-				err,
-				http.StatusBadGateway,
-			)))
-			stream.Produce(reqStream)
 			return
 		}
 		finalHandler(w, r)
@@ -217,8 +200,6 @@ func (p *Proxy) call(w http.ResponseWriter, r *http.Request) {
 		serviceResult := p.makeServiceCall()
 		if !serviceResult.IsSuccess() {
 			http.Error(w, serviceResult.Value().Message, serviceResult.Value().Status)
-			reqStream := stream.NewRequestStream(p, serviceResult)
-			stream.Produce(reqStream)
 			return
 		}
 		fmt.Fprint(w, serviceResult.Value().Json())
@@ -228,13 +209,9 @@ func (p *Proxy) call(w http.ResponseWriter, r *http.Request) {
 	retryBackoffResult := retryBackoff.Execute(p.makeServiceCall, p.service)
 	if !retryBackoffResult.IsSuccess() {
 		http.Error(w, retryBackoffResult.Value().Json(), p.Ctx.GetStatusString(retryBackoffResult.Value().Json()))
-		reqStream := stream.NewRequestStream(p, retryBackoffResult)
-		stream.Produce(reqStream)
 		return
 	}
 	fmt.Fprint(w, retryBackoffResult.Value().Json())
-	reqStream := stream.NewRequestStream(p, retryBackoffResult)
-	stream.Produce(reqStream)
 }
 
 func (p *Proxy) Call(ctx context.Context) {
@@ -265,15 +242,7 @@ func (p *Proxy) ServiceName() string {
 }
 
 func (p *Proxy) StreamHeaders() map[string]string {
-	return map[string]string{
-		stream.HeaderContentType: p.Ctx.Header(stream.HeaderContentType),
-		stream.HeaderUserAgent:   p.Ctx.Header(stream.HeaderUserAgent),
-	}
-}
-
-func (p *Proxy) HeadersToJson() string {
-	data, _ := json.Marshal(p.StreamHeaders())
-	return fmt.Sprintf("%s", data)
+	return map[string]string{}
 }
 
 func (p *Proxy) Duration() time.Duration {
