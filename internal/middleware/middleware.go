@@ -55,7 +55,7 @@ func MiddlewaresOf(s *service.Service) MiddlewareMap {
 			mdlws[mdlwName] = h
 			continue
 		}
-		gh, ok := middlewares[mdlwName]
+		gh, ok := globales[mdlwName]
 		if ok {
 			mdlws[mdlwName] = gh
 		}
