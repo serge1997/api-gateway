@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 
@@ -12,7 +12,7 @@ import (
 
 var middlewaresMock MiddlewareHandlerMap = MiddlewareHandlerMap{
 	"logger": func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
-		fmt.Println("global middleware running")
+		log.Printf("%s - %s", ctx.Method(), ctx.Path())
 		return next, nil
 	},
 	"auth": func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {

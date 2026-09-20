@@ -119,18 +119,18 @@ func (p *Proxy) withCircuitBreaker(handler http.HandlerFunc, befores []Middlewar
 	if p.service.CbConfig == nil {
 		return handler
 	}
-	if len(befores) > 0 {
-		for _, beforeHandler := range befores {
-			hander_, err := beforeHandler(p.Ctx, finalHandler)
-			if err != nil {
-				statusCode := p.Ctx.GetStatusString(err.Error())
-				http.Error(p.Ctx.Writer(), err.Error(), statusCode)
-				return nil
-			}
-			finalHandler = hander_
-		}
-	}
 	return func(w http.ResponseWriter, r *http.Request) {
+		if len(befores) > 0 {
+			for _, beforeHandler := range befores {
+				hander_, err := beforeHandler(p.Ctx, finalHandler)
+				if err != nil {
+					statusCode := p.Ctx.GetStatusString(err.Error())
+					http.Error(w, err.Error(), statusCode)
+					return
+				}
+				finalHandler = hander_
+			}
+		}
 		if p.service.CircuitBreaker == nil {
 			cb, err := circuitbreaker.New(p.service.CbConfig)
 			if err != nil {

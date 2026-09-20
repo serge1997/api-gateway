@@ -2,12 +2,14 @@ package proxy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	circuitbreaker "github.com/serge1997/apigateway/internal/circuitBreaker"
 	"github.com/serge1997/apigateway/internal/contracts"
 	ratelimit "github.com/serge1997/apigateway/internal/rateLimit"
 )
@@ -92,6 +94,7 @@ func TestBuildMiddlewaresChain(t *testing.T) {
 		var m map[string]interface{}
 		json.Unmarshal([]byte(body), &m)
 		success := m["success"].(bool)
+		fmt.Println(body)
 		if success != false {
 			t.Error("handler must fail on failed middleware")
 		}
@@ -176,5 +179,58 @@ func TestApplyRateLimitChain(t *testing.T) {
 			t.Errorf("must success with final handler response: %s got %s", expected, result)
 		}
 	})
+}
 
+func TestWithCircuitBreaker(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("cb final handler"))
+	}
+	before, _ := proxyMock.splitMiddlewares()
+	req := httptest.NewRequest(http.MethodGet, serviceMock.Target, nil)
+	t.Run("must return final handler on cb config nil", func(t *testing.T) {
+		finalHandler := proxyMock.withCircuitBreaker(handler, before)
+		recorder := httptest.NewRecorder()
+		finalHandler(recorder, req)
+		expected := "cb final handler"
+		result := recorder.Body.String()
+		if expected != result {
+			t.Errorf("expected final handler response: %s, got %s", expected, result)
+		}
+	})
+
+	t.Run("must fail on before middleware", func(t *testing.T) {
+		t.Cleanup(func() {
+			before, _ = proxyMock.splitMiddlewares()
+		})
+		before = append(before, func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+			return nil, ctx.Err(errors.New("internal server"), 501)
+		})
+		recorder := httptest.NewRecorder()
+		var m map[string]interface{}
+		resultHandler := proxyMock.withCircuitBreaker(handler, before)
+		resultHandler(recorder, req)
+		body := recorder.Body.String()
+		json.Unmarshal([]byte(body), &m)
+		result := m["message"].(string)
+		exepected := "internal server"
+		if result != exepected {
+			t.Errorf("expected before middleware response: %s, got %s", exepected, result)
+		}
+	})
+
+	t.Run("must return circuit breaker error", func(t *testing.T) {
+		serviceMock.CircuitBreaker.State = circuitbreaker.Open
+		recorder := httptest.NewRecorder()
+		resultHandler := proxyMock.withCircuitBreaker(handler, before)
+		resultHandler(recorder, req)
+		var m map[string]interface{}
+		body := recorder.Body.String()
+		json.Unmarshal([]byte(body), &m)
+		result := m["message"].(string)
+		exepected := circuitbreaker.ErrUnacessibleService.Error()
+		if result != exepected {
+			t.Errorf("expected circuit breaker error: %s, got %s", exepected, result)
+		}
+	})
 }
