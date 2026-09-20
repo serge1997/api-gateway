@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"errors"
 	"strings"
+	"testing"
 
 	"golang.org/x/time/rate"
 )
@@ -52,4 +53,15 @@ func (b *bucket) Allow() error {
 		return ErrBucketLimitExceeded
 	}
 	return nil
+}
+
+func (b *bucket) clearCache() {
+	mu.Lock()
+	defer mu.Unlock()
+	bucketCache = make(map[string]*bucket)
+}
+
+func (b *bucket) ClearCacheForTest(t *testing.T) {
+	t.Helper()
+	bucketCache = make(map[string]*bucket)
 }

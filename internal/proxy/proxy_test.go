@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/serge1997/apigateway/internal/contracts"
@@ -20,7 +21,7 @@ func TestProxyJwt(t *testing.T) {
 		}
 	})
 
-	t.Run("must extract from header", func(t *testing.T) {
+	t.Run("must extract jwt token from header", func(t *testing.T) {
 		expected := "jwt_mocked"
 		proxyMock.Ctx.Req().Header.Set("Authorization", fmt.Sprintf("Bearer %s", expected))
 		jwt, _ = proxyMock.Jwt()
@@ -127,6 +128,11 @@ func TestApplyRateLimitChain(t *testing.T) {
 	})
 
 	t.Run("must fail with rate limite error", func(t *testing.T) {
+		t.Cleanup(func() {
+			for _, rt := range serviceMock.RateLimiters {
+				rt.ClearCacheForTest(t)
+			}
+		})
 		serviceMock.RateLimits = []*ratelimit.Config{
 			{
 				Type:  "bucket",
@@ -135,14 +141,39 @@ func TestApplyRateLimitChain(t *testing.T) {
 			},
 		}
 		resultHandler := proxyMock.applyRateLimitChain(handler)
-		recorder := httptest.NewRecorder()
-		var expected string
+		var expected string = "bucket limit exceeded"
+		var result string
 		for range 3 {
+			recorder := httptest.NewRecorder()
 			resultHandler(recorder, req)
-			expected = recorder.Body.String()
+			result = strings.Trim(recorder.Body.String(), "\n")
 		}
-		if recorder.Body.String() != expected {
-			t.Errorf("must fail with bucket rate limit erro: %s got %s", "bucket limit exceeded", recorder.Body.String())
+		if result != expected {
+			t.Errorf("must fail with bucket rate limit erro: %s got %s", expected, result)
+		}
+	})
+
+	t.Run("rate limit must allow final handler execution", func(t *testing.T) {
+		serviceMock.RateLimiters = nil
+		serviceMock.RateLimits = nil
+		serviceMock.RateLimits = []*ratelimit.Config{
+			{
+				Type:  "bucket",
+				Rate:  5,
+				Burst: 10,
+			},
+		}
+
+		resultHandler := proxyMock.applyRateLimitChain(handler)
+		var expected string = "rate limit final handler"
+		var result string
+		for range 3 {
+			recorder := httptest.NewRecorder()
+			resultHandler(recorder, req)
+			result = recorder.Body.String()
+		}
+		if result != expected {
+			t.Errorf("must success with final handler response: %s got %s", expected, result)
 		}
 	})
 

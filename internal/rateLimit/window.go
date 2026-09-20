@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"errors"
 	"sync"
+	"testing"
 	"time"
 )
 
@@ -82,4 +83,15 @@ func (w *window) Allow() error {
 	}
 	//too many requests, reject the request
 	return ErrWindowLimitExceeded
+}
+
+func (w *window) ClearCache() {
+	mu.Lock()
+	defer mu.Unlock()
+	cache = map[string]*window{}
+}
+
+func (w *window) ClearCacheForTest(t *testing.T) {
+	t.Helper()
+	cache = map[string]*window{}
 }
