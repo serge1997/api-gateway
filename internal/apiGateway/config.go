@@ -6,6 +6,7 @@ import (
 	"github.com/serge1997/apigateway/internal/contracts"
 )
 
+var defaultServiceLookupHeader = "x-gateway-service"
 var cORSAllowedOrigins []string
 
 type APIGatewayConfig struct {

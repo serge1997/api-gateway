@@ -41,13 +41,7 @@ func (c *Context) Unauthorized() error {
 	))
 }
 func (c *Context) Err(err error, status int) error {
-	return fmt.Errorf("%s", httpresponse.ToJSON(
-		err.Error(),
-		status,
-		false,
-		"",
-		//string(debug.Stack()),
-	))
+	return Err(err, status)
 }
 
 func (c *Context) Host() string {
@@ -68,4 +62,14 @@ func (c *Context) GetStatusString(str string) int {
 		status = int(value.(float64))
 	}
 	return status
+}
+
+func Err(err error, status int) error {
+	return fmt.Errorf("%s", httpresponse.ToJSON(
+		err.Error(),
+		status,
+		false,
+		"",
+		//string(debug.Stack()),
+	))
 }

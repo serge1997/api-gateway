@@ -23,16 +23,15 @@ import (
 type ServiceHttpHandler func(http.HandlerFunc) http.HandlerFunc
 type MiddlewareHandler func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error)
 type MiddlewareHandlerMap map[string]MiddlewareHandler
-type CombinedMiddlewares = map[string]MiddlewareHandlerMap
 
 type Proxy struct {
 	service     *service.Service
 	Ctx         *Context
-	middlewares CombinedMiddlewares
+	middlewares MiddlewareHandlerMap
 	duration    time.Duration
 }
 
-func New(service *service.Service, middlewares CombinedMiddlewares, w http.ResponseWriter, r *http.Request) *Proxy {
+func New(service *service.Service, middlewares MiddlewareHandlerMap, w http.ResponseWriter, r *http.Request) *Proxy {
 	return &Proxy{service: service, Ctx: &Context{r, w}, middlewares: middlewares}
 }
 
@@ -63,21 +62,8 @@ func (p *Proxy) setDefaultHeaders(client *http.Request) {
 }
 
 func (p *Proxy) splitMiddlewares() (before, after []MiddlewareHandler) {
-	serviceMiddlewares := p.middlewares["service"]
-	globalMiddlewares := p.middlewares["global"]
 	for _, name := range p.service.Middlewares {
-		handler, ok := serviceMiddlewares[name]
-		if !ok {
-			continue
-		}
-		if !p.service.CbIsNil() && slices.Contains(p.service.CbConfig.Before, name) {
-			before = append(before, handler)
-			continue
-		}
-		after = append(after, handler)
-	}
-	for _, name := range p.service.Middlewares {
-		handler, ok := globalMiddlewares[name]
+		handler, ok := p.middlewares[name]
 		if !ok {
 			continue
 		}
@@ -94,7 +80,8 @@ func (p *Proxy) buildMiddlewaresChain(handler http.HandlerFunc, afterMiddlewares
 	for _, middleware := range afterMiddlewares {
 		handler_, err := middleware(p.Ctx, finalHandler)
 		if err != nil {
-			http.Error(p.Ctx.Writer(), err.Error(), 501)
+			statusCode := p.Ctx.GetStatusString(err.Error())
+			http.Error(p.Ctx.Writer(), err.Error(), statusCode)
 			return nil
 		}
 		finalHandler = handler_
@@ -107,6 +94,7 @@ func (p *Proxy) applyRateLimitChain(handler http.HandlerFunc) http.HandlerFunc {
 		return handler
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
+		// check if service rate Limiters has not instantiate yet
 		if len(p.service.RateLimiters) < 1 {
 			var limitersSlice []ratelimit.RateLimiter
 			for _, rateLimitConfig := range serviceRateLimits {
@@ -135,7 +123,8 @@ func (p *Proxy) withCircuitBreaker(handler http.HandlerFunc, befores []Middlewar
 		for _, beforeHandler := range befores {
 			hander_, err := beforeHandler(p.Ctx, finalHandler)
 			if err != nil {
-				http.Error(p.Ctx.Writer(), p.Ctx.Err(err, 501).Error(), 501)
+				statusCode := p.Ctx.GetStatusString(err.Error())
+				http.Error(p.Ctx.Writer(), err.Error(), statusCode)
 				return nil
 			}
 			finalHandler = hander_

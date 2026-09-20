@@ -43,7 +43,7 @@ func doRequest(ctx context.Context, wg *sync.WaitGroup) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	request.Header.Set("x-service-name", "users")
+	request.Header.Set("x-gateway-service", "users")
 	request.Header.Set("Content-Type", "application/json")
 	token = "my-secret-token"
 	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))

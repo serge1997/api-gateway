@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	apigateway "github.com/serge1997/apigateway/internal/apiGateway"
@@ -15,13 +16,13 @@ func ServicesHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	serviceName := r.Header.Get("x-service-name")
+	serviceName := apigateway.ExtractServiceName(r)
 	srvce := apigateway.GetService(serviceName)
 	if srvce == nil {
-		http.Error(w, "service not found", 404)
+		http.Error(w, proxy.Err(fmt.Errorf("service %s not found", serviceName), http.StatusNotFound).Error(), http.StatusNotFound)
 		return
 	}
-	combindedMdlws := middleware.CombinedGlobalWithService(srvce)
+	combindedMdlws := middleware.MiddlewaresOf(srvce)
 	prxy := proxy.New(srvce, combindedMdlws, w, r)
 	prxy.Call(r.Context())
 }

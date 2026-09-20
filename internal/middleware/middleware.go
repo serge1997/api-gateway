@@ -12,7 +12,6 @@ type MiddlewareMap = proxy.MiddlewareHandlerMap
 
 var middlewares MiddlewareMap = map[string]Handler{}
 var globales MiddlewareMap = map[string]Handler{}
-var combined proxy.CombinedMiddlewares = map[string]proxy.MiddlewareHandlerMap{}
 var cache = map[string]MiddlewareMap{}
 var mu sync.RWMutex
 
@@ -37,6 +36,8 @@ func Globales() map[string]Handler {
 	return globales
 }
 
+// return a map with both global middleware and service rgistred
+// middlewares
 func MiddlewaresOf(s *service.Service) MiddlewareMap {
 	mu.RLock()
 	serviceMdlws, ok := cache[s.Name]
@@ -52,16 +53,13 @@ func MiddlewaresOf(s *service.Service) MiddlewareMap {
 		h, ok := middlewares[mdlwName]
 		if ok {
 			mdlws[mdlwName] = h
+			continue
+		}
+		gh, ok := middlewares[mdlwName]
+		if ok {
+			mdlws[mdlwName] = gh
 		}
 	}
 	cache[s.Name] = mdlws
 	return mdlws
-}
-
-func CombinedGlobalWithService(s *service.Service) proxy.CombinedMiddlewares {
-	serviceMdlws := MiddlewaresOf(s)
-	combined := proxy.CombinedMiddlewares{}
-	combined["service"] = serviceMdlws
-	combined["global"] = globales
-	return combined
 }

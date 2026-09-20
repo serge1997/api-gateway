@@ -1,8 +1,14 @@
 package proxy
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/serge1997/apigateway/internal/contracts"
+	ratelimit "github.com/serge1997/apigateway/internal/rateLimit"
 )
 
 func TestProxyJwt(t *testing.T) {
@@ -24,19 +30,120 @@ func TestProxyJwt(t *testing.T) {
 	})
 }
 
+func TestProxyHasSetDefaultHeaders(t *testing.T) {
+	client := httptest.NewRequest(http.MethodGet, "http://apitgateway", nil)
+	proxyMock.Ctx.req.Header.Set("Content-Type", "multipart/form-data")
+	proxyMock.Ctx.req.Header.Set("Authorization", "beaer_mocked_token")
+	proxyMock.setDefaultHeaders(client)
+	t.Run("proxy must set client content type header to service call request", func(t *testing.T) {
+		expected := "multipart/form-data"
+		if client.Header.Get("Content-Type") != expected {
+			t.Errorf("content type header must be %s got %s", expected, client.Header.Get("Content-Type"))
+		}
+	})
+
+	t.Run("proxy must set client Authorization header to service call request", func(t *testing.T) {
+		expected := "beaer_mocked_token"
+		if client.Header.Get("Authorization") != expected {
+			t.Errorf("Authorization header must be %s got %s", expected, client.Header.Get("Authorization"))
+		}
+	})
+}
+
 func TestProxyMustSplitMiddleware(t *testing.T) {
 	before, after := proxyMock.splitMiddlewares()
-	t.Run("before middleware must contain configured one", func(t *testing.T) {
+	t.Run("before must contain expected number of middlewares configured", func(t *testing.T) {
 		expected := 1
 		if len(before) != 1 {
 			t.Errorf("before must contain %d middleware configured got %d", expected, len(before))
 		}
 	})
 
-	t.Run("after middleware must contain configured one", func(t *testing.T) {
-		expected := 1
-		if len(after) != 1 {
-			t.Errorf("after must contain %d middleware configured got %d", expected, len(after))
+	t.Run("after must contain expected number of middlewares configured", func(t *testing.T) {
+		expected := 2
+		if len(after) != expected {
+			t.Errorf("after must contain %d middlewares configured got %d", expected, len(after))
 		}
 	})
+}
+
+func TestBuildMiddlewaresChain(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("final handler"))
+	}
+	t.Run("must execute final handler on nil afters middlewares", func(t *testing.T) {
+		result := proxyMock.buildMiddlewaresChain(handler, nil)
+		recorder := httptest.NewRecorder()
+		result(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+		if recorder.Body.String() != "final handler" {
+			t.Errorf("expected final handler output")
+		}
+	})
+
+	t.Run("must fail on after middleware", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		recorder := httptest.NewRecorder()
+		proxyMock = New(serviceMock, middlewaresMock, recorder, req)
+		_, after := proxyMock.splitMiddlewares()
+		_ = proxyMock.buildMiddlewaresChain(handler, after)
+		body := recorder.Body.String()
+		var m map[string]interface{}
+		json.Unmarshal([]byte(body), &m)
+		success := m["success"].(bool)
+		if success != false {
+			t.Error("handler must fail on failed middleware")
+		}
+	})
+
+	t.Run("middlewares chain must successed and execute final handler", func(t *testing.T) {
+		middlewaresMock["auth"] = func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
+			return next, nil
+		}
+		_, after := proxyMock.splitMiddlewares()
+		recorder := httptest.NewRecorder()
+		result := proxyMock.buildMiddlewaresChain(handler, after)
+		result(recorder, httptest.NewRequest("GET", serviceMock.Target, nil))
+		if recorder.Body.String() != "final handler" {
+			t.Errorf("all middlewares must success and execute correctly a final handler")
+		}
+	})
+}
+
+func TestApplyRateLimitChain(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("rate limit final handler"))
+	}
+	req := httptest.NewRequest(http.MethodGet, serviceMock.Target, nil)
+
+	t.Run("must return final handler on empty rate limit", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		resultHandler := proxyMock.applyRateLimitChain(handler)
+		resultHandler(recorder, req)
+		if recorder.Body.String() != "rate limit final handler" {
+			t.Error("must return final handler")
+		}
+	})
+
+	t.Run("must fail with rate limite error", func(t *testing.T) {
+		serviceMock.RateLimits = []*ratelimit.Config{
+			{
+				Type:  "bucket",
+				Rate:  2,
+				Burst: 1,
+			},
+		}
+		resultHandler := proxyMock.applyRateLimitChain(handler)
+		recorder := httptest.NewRecorder()
+		var expected string
+		for range 3 {
+			resultHandler(recorder, req)
+			expected = recorder.Body.String()
+		}
+		if recorder.Body.String() != expected {
+			t.Errorf("must fail with bucket rate limit erro: %s got %s", "bucket limit exceeded", recorder.Body.String())
+		}
+	})
+
 }

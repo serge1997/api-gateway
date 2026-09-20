@@ -36,7 +36,8 @@ func (s *server) setListenAddr() {
 }
 
 func (s *server) setReadTimeout() {
-	if s.cfg.ReadTimeout().String() == "0s" {
+	var z time.Duration
+	if s.cfg.ReadTimeout() == z {
 		s.readTimeout = defaultReadWriteTimeout
 		return
 	}
@@ -44,7 +45,8 @@ func (s *server) setReadTimeout() {
 }
 
 func (s *server) setWriteTimeout() {
-	if s.cfg.ReadTimeout().String() == "0s" {
+	var z time.Duration
+	if s.cfg.ReadTimeout() == z {
 		s.writeTimeout = defaultReadWriteTimeout
 		return
 	}
