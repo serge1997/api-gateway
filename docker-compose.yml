@@ -1,0 +1,11 @@
+services:
+  app:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    container_name: api_gateway_app
+    restart: unless-stopped
+    volumes:
+      - ./services.yml/:/services.yml
+    ports:
+      - 9091:9091

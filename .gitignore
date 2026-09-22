@@ -1,2 +1,4 @@
 .DS_Store
 metrics.db
+Dockerfile.dev
+docker-compose.dev.yml
