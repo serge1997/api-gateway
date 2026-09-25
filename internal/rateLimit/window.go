@@ -85,7 +85,7 @@ func (w *window) Allow() error {
 	return ErrWindowLimitExceeded
 }
 
-func (w *window) ClearCache() {
+func (w *window) clearCache() {
 	mu.Lock()
 	defer mu.Unlock()
 	cache = map[string]*window{}
@@ -93,5 +93,5 @@ func (w *window) ClearCache() {
 
 func (w *window) ClearCacheForTest(t *testing.T) {
 	t.Helper()
-	cache = map[string]*window{}
+	w.clearCache()
 }

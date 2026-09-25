@@ -13,7 +13,7 @@ type bucket struct {
 	key       string
 }
 
-var ErrBucketLimitExceeded error = errors.New("bucket limit exceeded")
+var ErrBucketLimitExceeded error = errors.New("rate limit bucket limit exceeded")
 var ErrBucketKeyEmpty error = errors.New("bucket key cannot be empty")
 var bucketCache map[string]*bucket = make(map[string]*bucket)
 
@@ -41,8 +41,11 @@ func (b *bucket) Burst() int {
 }
 
 func extractServiceNameFromKey(key string) (string, error) {
+	if key == "" {
+		return "", ErrBucketKeyEmpty
+	}
 	splitedKey := strings.Split(key, "_")
-	if len(splitedKey) < 1 {
+	if len(splitedKey) == 1 {
 		return "", ErrBucketKeyEmpty
 	}
 	return splitedKey[0], nil
@@ -63,5 +66,5 @@ func (b *bucket) clearCache() {
 
 func (b *bucket) ClearCacheForTest(t *testing.T) {
 	t.Helper()
-	bucketCache = make(map[string]*bucket)
+	b.clearCache()
 }
