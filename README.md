@@ -6,10 +6,11 @@ A production-ready API Gateway written in Go, featuring per-service rate limitin
 
 ## Features
 
-- **Circuit Breaker** — per-service or register once for all services, with Closed / Open / Half-Open state machine and configurable failure threshold and retry timeout
+- **Circuit Breaker** — per-service, with Closed / Open / Half-Open state machine and configurable failure threshold and retry timeout
 - **Rate Limiting** — two strategies per service: Token Bucket and Sliding Window
 - **Middleware Pipeline** — register middleware globally, apply per-service; control which middlewares run before the circuit breaker check
-- **YAML Configuration** — all behavior is declared in `services.yml`, no code changes required to add or modify services
+- **Retry with Backoff** — four strategies (constant, linear, exponential, jitter) configurable per-service; integrates with the circuit breaker to abort early if the circuit opens mid-retry
+- **YAML Configuration** — all behavior is declared in `gateway.yml`, no code changes required to add or modify services
 
 ---
 
@@ -65,44 +66,64 @@ Incoming Request
 
 ## Configuration
 
+The configuration file has two levels: root-level keys that apply to the gateway as a whole, and per-service keys under `services`.
+
 ```yaml
 # services.yml
+
+# --- Gateway-level configuration ---
+
+service_lookup_header: "x-gateway-service"  # header used to identify the target service
+                                             # default: "x-gateway-service"
+
+cors_allowed_origins:
+  - "http://127.0.0.1:5500"
+
+# Global middlewares — run for every service before per-service middlewares.
+# Registered via gtw.UseGlobal() at startup.
+middlewares:
+  - logger
+
+# Global circuit breaker — applied to any service that does not define its own.
+circuit_breaker:
+  failure_threshold: 10      # consecutive failures before opening the circuit
+  retry_timeout: "30s"       # how long to wait before trying again (Half-Open)
+  before:
+    - logger                 # runs before the circuit breaker check
+
+# Global retry — applied to any service that does not define its own.
+retry:
+  attempts: 3
+  backoff: exponential
+  delay: "400ms"
+
+# --- HTTP server configuration ---
 server:
   listen_addr: "9091"
-  timeout: "6s"
-  cors_allowed_origins: ["http://127.0.0.1:5500"]
-  middlewares:
-    - logger
-    - cors
-  circuit_breaker:
-    failure_threshold: 5  
-    retry_timeout: "10s" 
-    before:
-      - logger 
+  timeout: "6s"              # default request timeout
+  read_header_timeout: "500ms"
+
+# --- Per-service configuration ---
 services:
   users:
     name: users
     target: http://localhost:8000/api
-    timeout: "10s"
-    middlewares:
-      - auth_jwt
-    rate_limits:
-      - type: bucket  
-        rate: 20
-        burst: 5  
-      - type: window 
-        limit: 60
-        interval: "1m" 
+    timeout: "10s"           # overrides server.timeout for this service
 
-  orders:
-    name: orders
-    target: http://localhost:9000/api
+    # Per-service middlewares — run after global middlewares and after the
+    # circuit breaker check. Must be registered via gtw.Use() at startup.
     middlewares:
-      - auth_jwt
+      - auth
+
+    # Supports multiple strategies applied in sequence.
     rate_limits:
-      - type: bucket
-        rate: 50
-        burst: 10
+      - type: bucket         # Token Bucket — smooth request flow
+        rate: 20             # tokens added per second
+        burst: 5             # max burst size
+
+      - type: window         # Sliding Window — hard limit per interval
+        limit: 60            # max requests allowed
+        interval: "60s"      # window duration (e.g. "30s", "1m", "1h")
 ```
 
 ---
@@ -132,11 +153,14 @@ func main() {
 	)
 	defer srv.Close()
 
+	// Global middleware — runs for every service.
+	// Declared under "middlewares" in the root of services.yml.
 	gtw.UseGlobal("logger", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
 		log.Printf("%s - %s", ctx.Method(), ctx.Path())
 		return next, nil
 	})
 
+	// Per-service middleware — declared under each service's "middlewares" in services.yml.
 	gtw.Use("auth", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
 		if ctx.Header("Authorization") != "Bearer my-secret-token" {
 			return nil, ctx.Unauthorized()
@@ -190,12 +214,24 @@ The circuit breaker protects downstream services from cascading failures. It ope
 | **Open** | Requests are rejected immediately with `503` |
 | **Half-Open** | One request is allowed through to test recovery; success closes, failure reopens |
 
+The circuit breaker can be declared globally (applies to all services) or per-service (overrides the global):
+
 ```yaml
+# global — root level
 circuit_breaker:
-  failure_threshold: 5   # open after 5 consecutive failures
-  retry_timeout: "10s"   # try Half-Open after 10 seconds
+  failure_threshold: 10
+  retry_timeout: "30s"
   before:
     - logger             # these middlewares run even when the circuit is Open
+
+# per-service — overrides the global for this service only
+services:
+  orders:
+    circuit_breaker:
+      failure_threshold: 3
+      retry_timeout: "10s"
+      before:
+        - logger
 ```
 
 The `before` list controls which middlewares execute before the circuit breaker check. This is useful for logging and metrics — you may want to record rejected requests even when the circuit is open.
@@ -217,14 +253,22 @@ When a downstream service fails, the gateway can retry the request automatically
 
 ### Configuration
 
+Retry can be declared globally (applies to all services) or per-service:
+
 ```yaml
+# global — root level
+retry:
+  attempts: 3
+  backoff: exponential
+  delay: "400ms"
+
+# per-service — overrides the global for this service only
 services:
   orders:
-    target: http://localhost:9000/api
     retry:
-      strategy: exponential
-      attempts: 3         # default: 1
-      max_delay: "1s"     # applies to jitter and exponential
+      attempts: 5
+      backoff: jitter
+      delay: "200ms"
 ```
 
 ### How it integrates with the Circuit Breaker
@@ -260,23 +304,31 @@ api-gateway/
 │   └── gateway/
 │       └── main.go
 ├── internal/
+│   ├── apiGateway/
+│   │   └── gateway.go     # gateway core — middleware registry, pipeline assembly
+│   ├── server/
+│   │   └── server.go      # HTTP server setup, options pattern
 │   ├── proxy/
-│   │   └── proxy.go 
-|   ├── retry/
-│   │   ├── constant.go
-│   │   ├── exponential.go
-│   │   └── jitter.go
-│   │   └── linear.go
-│   │   └── retry.go
+│   │   └── proxy.go       # reverse proxy and request pipeline
+│   ├── contracts/
+│   │   └── *.go           # shared interfaces — Context, Service, Router
 │   ├── ratelimit/
-│   │   ├── bucket.go   
-│   │   ├── window.go 
+│   │   ├── bucket.go      # token bucket strategy
+│   │   ├── window.go      # sliding window strategy
 │   │   └── config.go
 │   ├── circuitbreaker/
-│   │   ├── circuitbreaker.go
+│   │   ├── circuitbreaker.go  # state machine: Closed, Open, HalfOpen
 │   │   └── config.go
-└── go.mod
-└── services.yml
+│   ├── retry/
+│   │   ├── retry.go       # shared RecordFailure/RecordSuccess logic
+│   │   ├── constant.go
+│   │   ├── linear.go
+│   │   ├── exponential.go
+│   │   └── jitter.go
+│   └── router/
+│       └── router.go      # request routing by service_lookup_header
+├── go.mod
+└── services.yml           # gateway configuration
 ```
 
 ---
@@ -285,14 +337,14 @@ api-gateway/
 
 ```bash
 # Clone the repository
-git clone https://github.com/you/api-gateway
-cd api-gateway
+git clone https://github.com/serge1997/apigateway
+cd apigateway
 
 # Run the gateway
-go run ./cmd/gateway main.go
+go run ./cmd/gateway/main.go
 ```
 
-The gateway listens on `:8080` by default.
+The gateway listens on the port declared in `server.listen_addr` in `services.yml`.
 
 ---
 
@@ -304,7 +356,7 @@ services:
   gateway:
     build: .
     ports:
-      - "8080:8080"
+      - "9091:9091"
     volumes:
       - ./services.yml:/app/services.yml
 
@@ -327,11 +379,20 @@ docker compose up
 
 ## Design Decisions
 
+**Why global circuit breaker and retry with per-service override?**
+Declaring a global default eliminates repetition — most services share the same resilience policy. A service that needs different behavior declares only what changes. This follows the same convention as Docker Compose and Kubernetes, where a base config is extended rather than duplicated.
+
 **Why `before` in the circuit breaker config?**
 Most gateways apply all middlewares before or after the circuit breaker — with no per-service control. Here, `before` lets you declare exactly which middlewares should run even when the circuit is open. Logging and metrics make sense there; auth and business logic do not.
 
 **Why two rate limiting strategies?**
 Token bucket and sliding window solve different problems. Bucket is better for smoothing bursty traffic; window is better for strict quotas. Declaring both in sequence lets you enforce a burst limit and a per-minute cap independently on the same service.
+
+**Why does retry check the circuit breaker at the start of each attempt instead of after?**
+If the circuit opens during a retry loop, there is no point executing the next attempt — the downstream service is already considered unhealthy. Checking at the top of each iteration exits early without an unnecessary network call, which is exactly what the circuit breaker is designed to prevent.
+
+**Why a configurable `service_lookup_header`?**
+Different organizations have different header naming conventions. Instead of hardcoding `x-gateway-service`, the gateway lets the operator declare which header to use for service routing — making it easier to integrate into existing infrastructure without changing client code.
 
 **Why parse `time.Duration` from strings?**
 Accepting `"10s"`, `"500ms"`, and `"1m"` instead of plain integers avoids ambiguity about units and matches the convention used by Docker Compose, Kubernetes, and the Go standard library itself.
