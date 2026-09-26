@@ -71,16 +71,11 @@ func (a *apiGateway) ListenAddr() string {
 	return a.Server.ListenAddr
 }
 
-func (a *apiGateway) ReadTimeout() time.Duration {
-	return a.Server.ReadTimeout
-}
-
-func (a *apiGateway) WriteTimeout() time.Duration {
-	return a.Server.WriteTimeout
-}
-
 func (a *apiGateway) Timeout() time.Duration {
 	return a.Server.Timeout
+}
+func (a *apiGateway) ReadHeaderTimeout() time.Duration {
+	return a.Server.ReadHeaderTimeout
 }
 
 func applyGlobalDefaults() DefaultOpts {

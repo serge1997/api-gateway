@@ -9,17 +9,19 @@ import (
 )
 
 type server struct {
-	srv          *http.Server
-	listenAddr   string
-	readTimeout  time.Duration
-	writeTimeout time.Duration
-	timeout      time.Duration
-	cfg          contracts.APIGateway
-	router       contracts.Router
+	srv               *http.Server
+	listenAddr        string
+	timeout           time.Duration
+	cfg               contracts.APIGateway
+	router            contracts.Router
+	readHeaderTimeout time.Duration
 }
 
 func New(opts ...Option) *server {
-	s := &server{}
+	s := &server{
+		readHeaderTimeout: defaultReadHeaderTimout,
+		listenAddr:        defaultAddr,
+	}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -35,22 +37,13 @@ func (s *server) setListenAddr() {
 	s.listenAddr = s.cfg.ListenAddr()
 }
 
-func (s *server) setReadTimeout() {
+func (s *server) setReadHeaderTimeout() {
 	var z time.Duration
-	if s.cfg.ReadTimeout() == z {
-		s.readTimeout = defaultReadWriteTimeout
+	if s.cfg.ReadHeaderTimeout() == z {
+		s.readHeaderTimeout = defaultReadHeaderTimout
 		return
 	}
-	s.readTimeout = s.cfg.ReadTimeout()
-}
-
-func (s *server) setWriteTimeout() {
-	var z time.Duration
-	if s.cfg.ReadTimeout() == z {
-		s.writeTimeout = defaultReadWriteTimeout
-		return
-	}
-	s.readTimeout = s.cfg.WriteTimeout()
+	s.readHeaderTimeout = s.cfg.ReadHeaderTimeout()
 }
 
 func (s *server) setHttpServer() *server {
@@ -65,8 +58,7 @@ func (s *server) Listen() error {
 
 func (s *server) applyConfigValues() {
 	s.setListenAddr()
-	s.setReadTimeout()
-	s.setWriteTimeout()
+	s.setReadHeaderTimeout()
 	s.setHttpServer()
 }
 
@@ -76,10 +68,9 @@ func (s *server) Close() error {
 
 func newHttpServer(s *server) *http.Server {
 	return &http.Server{
-		Addr:         fmt.Sprintf(":%s", s.listenAddr),
-		ReadTimeout:  s.readTimeout,
-		WriteTimeout: s.writeTimeout,
-		Handler:      muxHandlers(s),
+		Addr:              fmt.Sprintf(":%s", s.listenAddr),
+		ReadHeaderTimeout: s.readHeaderTimeout,
+		Handler:           muxHandlers(s),
 	}
 }
 
