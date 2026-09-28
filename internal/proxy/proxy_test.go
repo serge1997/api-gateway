@@ -94,7 +94,6 @@ func TestBuildMiddlewaresChain(t *testing.T) {
 		var m map[string]interface{}
 		json.Unmarshal([]byte(body), &m)
 		success := m["success"].(bool)
-		fmt.Println(body)
 		if success != false {
 			t.Error("handler must fail on failed middleware")
 		}
