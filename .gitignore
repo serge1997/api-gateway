@@ -2,3 +2,5 @@
 metrics.db
 Dockerfile.dev
 docker-compose.dev.yml
+.air.toml
+tmp

@@ -23,11 +23,11 @@ func parse() (*apiGateway, error) {
 	return &gtw, nil
 }
 func loadYmlFile() ([]byte, error) {
-	absDir, err := filepath.Abs("./../../")
+	absDir, err := filepath.Abs("./")
 	if err != nil {
 		return nil, fmt.Errorf("erro on read asbolute path. detail: %v", err)
 	}
-	data, err := os.ReadFile(fmt.Sprintf("%s/services.yml", absDir))
+	data, err := os.ReadFile(fmt.Sprintf("%s/api-gateway.yml", absDir))
 	if err != nil {
 		return nil, fmt.Errorf("erro on open service yml file. detail: %v", err)
 	}

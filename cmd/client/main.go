@@ -19,8 +19,8 @@ func main() {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	wg.Add(20)
-	for range 1 {
+	wg.Add(5)
+	for range 5 {
 		delay := time.Duration(rand.Intn(9)+1*1000) * time.Millisecond
 		time.Sleep(delay)
 		go func() {
@@ -43,7 +43,7 @@ func doRequest(ctx context.Context, wg *sync.WaitGroup) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	request.Header.Set("x-gateway-service", "users")
+	request.Header.Set("x-gateway-service", "restaurant")
 	request.Header.Set("Content-Type", "application/json")
 	token = "my-secret-token"
 	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))

@@ -1,7 +1,7 @@
 server:
   listen_addr: "9091"
   timeout: "6s"
-  cors_allowed_origins: ["http://127.0.0.1:5500"]
+  cors_allowed_origins: ["http://vuejs_app:5500"]
   read_header_timeout: "500ms"
 service_lookup_header: "x-gateway-service"
 middlewares:
@@ -16,10 +16,10 @@ retry:
     backoff: exponential
     delay: "400ms"
 services:
-  users:
-    name: users
+  restaurant:
+    name: restaurant
     timeout: "10s"
-    target: http://localhost:8000/api
+    target: http://restaurant_nginx/api
     middlewares:
       - auth
     rate_limits:

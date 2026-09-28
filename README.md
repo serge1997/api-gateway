@@ -10,7 +10,7 @@ A production-ready API Gateway written in Go, featuring per-service rate limitin
 - **Rate Limiting** — two strategies per service: Token Bucket and Sliding Window
 - **Middleware Pipeline** — register middleware globally, apply per-service; control which middlewares run before the circuit breaker check
 - **Retry with Backoff** — four strategies (constant, linear, exponential, jitter) configurable per-service; integrates with the circuit breaker to abort early if the circuit opens mid-retry
-- **YAML Configuration** — all behavior is declared in `gateway.yml`, no code changes required to add or modify services
+- **YAML Configuration** — all behavior is declared in `api-gateway.yml`, no code changes required to add or modify services
 
 ---
 
@@ -69,7 +69,7 @@ Incoming Request
 The configuration file has two levels: root-level keys that apply to the gateway as a whole, and per-service keys under `services`.
 
 ```yaml
-# services.yml
+# api-gateway.yml
 
 # --- Gateway-level configuration ---
 
@@ -347,32 +347,64 @@ go run ./cmd/gateway/main.go
 The gateway listens on the port declared in `server.listen_addr` in `services.yml`.
 
 ---
-
 ## Running with Docker Compose
-
+ 
+The gateway creates a shared Docker network. Each microservice joins it as an external network — no port mapping needed between services.
+ 
+**Gateway `docker-compose.yml`:**
+ 
 ```yaml
 # docker-compose.yml
 services:
   gateway:
     build: .
     ports:
-      - "9091:9091"
+      - "9091:9091"    # only the gateway is exposed to the host
     volumes:
-      - ./services.yml:/app/services.yml
-
-  users:
-    image: your-users-service
-    ports:
-      - "8000:8000"
-
-  orders:
-    image: your-orders-service
-    ports:
-      - "9000:9000"
+      - ./services.yml/:/services.yml
+    networks:
+      - api-gateway-network
+ 
+networks:
+  api-gateway-network:
+    name: api-gateway-network
+    driver: bridge
 ```
-
+ 
+**Each microservice's `docker-compose.yml`:**
+ 
+```yaml
+# orders/docker-compose.yml
+services:
+  orders_app:
+    image: your-orders-service
+    networks:
+      - api-gateway-network
+ 
+networks:
+  api-gateway-network:
+    external: true    # joins the gateway's network
+```
+ 
+With this setup, services are reachable by container name and internal port inside the network. In `services.yml`, use the container name and the port the container listens on:
+ 
+```yaml
+services:
+  orders:
+    target: http://orders_app:3000/api
+  users:
+    target: http://users_app:8000/api
+```
+ 
+> The port must be the **internal** port the container listens on — not the host port, since no port mapping is needed between services.
+ 
 ```bash
-docker compose up
+# start the gateway network first
+docker compose up -d
+ 
+# then start each microservice from its own directory
+cd ../orders && docker compose up -d
+cd ../users && docker compose up -d
 ```
 
 ---
