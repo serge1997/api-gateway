@@ -154,13 +154,13 @@ func main() {
 	defer srv.Close()
 
 	// Global middleware — runs for every service.
-	// Declared under "middlewares" in the root of services.yml.
+	// Declared under "middlewares" in the root of api-gateway.yml.
 	gtw.UseGlobal("logger", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
 		log.Printf("%s - %s", ctx.Method(), ctx.Path())
 		return next, nil
 	})
 
-	// Per-service middleware — declared under each service's "middlewares" in services.yml.
+	// Per-service middleware — declared under each service's "middlewares" in api-gateway.yml.
 	gtw.Use("auth", func(ctx contracts.Context, next http.HandlerFunc) (http.HandlerFunc, error) {
 		if ctx.Header("Authorization") != "Bearer my-secret-token" {
 			return nil, ctx.Unauthorized()
@@ -328,7 +328,7 @@ api-gateway/
 │   └── router/
 │       └── router.go      # request routing by service_lookup_header
 ├── go.mod
-└── services.yml           # gateway configuration
+└── api-gateway.yml           # gateway configuration
 ```
 
 ---
@@ -344,7 +344,7 @@ cd apigateway
 go run ./cmd/gateway/main.go
 ```
 
-The gateway listens on the port declared in `server.listen_addr` in `services.yml`.
+The gateway listens on the port declared in `server.listen_addr` in `api-gateway.yml`.
 
 ---
 ## Running with Docker Compose
@@ -361,7 +361,7 @@ services:
     ports:
       - "9091:9091"    # only the gateway is exposed to the host
     volumes:
-      - ./services.yml/:/services.yml
+      - ./api-gateway.yml/:/api-gateway.yml
     networks:
       - api-gateway-network
  
@@ -386,7 +386,7 @@ networks:
     external: true    # joins the gateway's network
 ```
  
-With this setup, services are reachable by container name and internal port inside the network. In `services.yml`, use the container name and the port the container listens on:
+With this setup, services are reachable by container name and internal port inside the network. In `api-gateway.yml`, use the container name and the port the container listens on:
  
 ```yaml
 services:
